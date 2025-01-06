@@ -30,14 +30,34 @@ ALLOWED_HOSTS = []
 
 # Application definition
 
-INSTALLED_APPS = [
+DJANGO_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
     "django.contrib.messages",
-    "django.contrib.staticfiles",
+    "django.contrib.staticfiles", 
 ]
+
+# Third party apps
+THIRD_PARTY_APPS = [
+    "rest_framework",
+]
+
+# Custom apps
+PROJECT_APPS = [
+    "core.apps.CoreConfig",
+    "accounts.apps.AccountsConfig",
+    # "course.apps.CourseConfig",
+    # "result.apps.ResultConfig",
+    # "search.apps.SearchConfig",
+    # "quiz.apps.QuizConfig",
+    # "payments.apps.PaymentsConfig",
+]
+
+# Combine all apps
+INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + PROJECT_APPS
+
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
@@ -85,6 +105,8 @@ DATABASES = {
 }
 
 
+AUTH_USER_MODEL = 'accounts.CustomUser'
+
 # Password validation
 # https://docs.djangoproject.com/en/5.1/ref/settings/#auth-password-validators
 
@@ -102,6 +124,14 @@ AUTH_PASSWORD_VALIDATORS = [
         "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
     },
 ]
+
+
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ),
+}
+
 
 
 # Internationalization
