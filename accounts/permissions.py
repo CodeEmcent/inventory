@@ -1,6 +1,6 @@
 from rest_framework.permissions import BasePermission
 
-class IsAdminOrReadOnly(BasePermission):
+class IsAdminOrStaffOrReadOnly(BasePermission):
     """
     Custom permission to allow only admins to edit or delete, 
     but everyone can read.
@@ -11,7 +11,7 @@ class IsAdminOrReadOnly(BasePermission):
             return True
 
         # Allow only authenticated users with 'admin' role to perform other requests.
-        return request.user.is_authenticated and request.user.role == 'admin'
+        return request.user.is_authenticated and request.user.role in ('admin', 'staff')
 
 class IsSuperAdmin(BasePermission):
     """
@@ -20,7 +20,7 @@ class IsSuperAdmin(BasePermission):
     def has_permission(self, request, view):
         return request.user.is_authenticated and request.user.role == 'super_admin'
 
-class IsOwnerOrAdmin(BasePermission):
+class IsOwnerOrAdminOrStaff(BasePermission):
     """
     Custom permission to allow only the owner or admins to edit/delete an object.
     """
@@ -30,4 +30,7 @@ class IsOwnerOrAdmin(BasePermission):
             return True
 
         # Write permissions are only allowed to the owner or an admin
-        return obj.user == request.user or request.user.role == 'admin'
+        return (
+            obj.user == request.user or 
+            request.user.role in ('admin', 'staff')
+        )

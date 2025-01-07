@@ -5,7 +5,7 @@ from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
 from .models import InventoryItem
 from .serializers import InventoryItemSerializer
-from accounts.permissions import IsAdminOrReadOnly, IsOwnerOrAdmin
+from accounts.permissions import *
 
 
 class InventoryViewSet(ModelViewSet):
@@ -14,7 +14,7 @@ class InventoryViewSet(ModelViewSet):
     """
     queryset = InventoryItem.objects.all()
     serializer_class = InventoryItemSerializer
-    permission_classes = [IsAuthenticated, IsAdminOrReadOnly]
+    permission_classes = [IsAuthenticated, IsAdminOrStaffOrReadOnly]
 
     # Example of adding a custom action
     @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
@@ -31,5 +31,5 @@ class InventoryViewSet(ModelViewSet):
         Apply specific permissions for retrieve and destroy actions.
         """
         if self.action in ['retrieve', 'destroy']:
-            self.permission_classes = [IsOwnerOrAdmin]
+            self.permission_classes = [IsOwnerOrAdminOrStaff]
         return super().get_permissions()
