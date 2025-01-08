@@ -6,7 +6,6 @@ from django.shortcuts import get_object_or_404
 from .models import InventoryItem
 from .serializers import InventoryItemSerializer
 from accounts.permissions import *
-
 from rest_framework.views import APIView
 from openpyxl import Workbook
 from django.http import HttpResponse
