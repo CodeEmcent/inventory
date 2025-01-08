@@ -42,6 +42,7 @@ DJANGO_APPS = [
 # Third party apps
 THIRD_PARTY_APPS = [
     "rest_framework",
+    'rest_framework_simplejwt.token_blacklist',
 ]
 
 # Custom apps
@@ -129,6 +130,9 @@ AUTH_PASSWORD_VALIDATORS = [
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ),
+    'DEFAULT_PERMISSION_CLASSES': (
+        'rest_framework.permissions.IsAuthenticated',  # Enforces authentication globally
     ),
 }
 
