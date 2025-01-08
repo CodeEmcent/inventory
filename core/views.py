@@ -2,6 +2,7 @@ from rest_framework.viewsets import ModelViewSet
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from django.db import models  # Import models for aggregation
 from django.shortcuts import get_object_or_404
 from .models import InventoryItem
 from .serializers import InventoryItemSerializer
@@ -21,23 +22,73 @@ class InventoryViewSet(ModelViewSet):
     serializer_class = InventoryItemSerializer
     permission_classes = [IsAuthenticated, IsAdminOrStaffOrReadOnly]
 
-    # Example of adding a custom action
     @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
     def my_items(self, request):
         """
         Custom action to retrieve inventory items owned by the requesting user.
         """
-        user_items = InventoryItem.objects.filter(user=request.user)
-        serializer = self.get_serializer(user_items, many=True)
+        queryset = self.get_queryset().filter(user=request.user)  # Ensure consistent filtering
+        serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
 
+    @action(detail=False, methods=['get'], permission_classes=[IsAdminOrSuperAdmin])
+    def broadsheet(self, request):
+        """
+        Aggregated inventory data for the entire organization.
+        """
+        data = InventoryItem.objects.values('name').annotate(
+            total_quantity=models.Sum('quantity')
+        )
+        return Response(data)
+
+    def get_queryset(self):
+        # Restrict staff to only see items for their assigned offices
+        if self.request.user.role == 'staff':
+            return InventoryItem.objects.filter(office__in=self.request.user.assigned_offices.all())
+        # Admins and superadmins can view all inventory
+        return InventoryItem.objects.all()
+    
     def get_permissions(self):
         """
         Apply specific permissions for retrieve and destroy actions.
         """
         if self.action in ['retrieve', 'destroy']:
-            self.permission_classes = [IsOwnerOrAdminOrStaff]
+            self.permission_classes = [IsAssignedStaff]
+        else:
+            self.permission_classes = [IsAdminOrSuperAdmin]
         return super().get_permissions()
+
+    def destroy(self, request, *args, **kwargs):
+        """
+        Override the destroy method to add a custom success message.
+        """
+        instance = self.get_object()
+        self.perform_destroy(instance)
+        return Response({"message": "Item successfully deleted."}, status=200)
+
+
+class TemplateView(APIView):
+    """
+    Endpoint to download an Excel template for inventory import.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.title = "Inventory Template"
+
+        # Add headers
+        headers = ["Name", "Quantity", "Office"]
+        sheet.append(headers)
+
+        # Prepare response
+        response = HttpResponse(
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        response['Content-Disposition'] = 'attachment; filename=inventory_template.xlsx'
+        workbook.save(response)
+        return response
 
 
 class ExportInventoryView(APIView):
@@ -78,7 +129,6 @@ class ExportInventoryView(APIView):
         return response
 
 
-
 class ImportInventoryView(APIView):
     """
     View to handle importing inventory items from an Excel file, replacing quantities for duplicates.
@@ -100,10 +150,12 @@ class ImportInventoryView(APIView):
             # Extract and validate data
             imported_items = []
             updated_items = []
+            errors = []  # Track row-specific errors
             for i, row in enumerate(sheet.iter_rows(min_row=2, values_only=True)):  # Skip header
                 name, quantity = row
                 if not name or not isinstance(quantity, (int, float)):
-                    return Response({"error": f"Invalid data in row {i + 2}."}, status=400)
+                    errors.append({"row": i + 2, "error": "Invalid data."})
+                    continue
 
                 # Normalize the name to handle duplicates (case and whitespace)
                 normalized_name = name.strip().lower()
@@ -127,6 +179,7 @@ class ImportInventoryView(APIView):
                 "new_items_added": len(imported_items),
                 "updated_items": len(updated_items),
                 "updated_item_names": updated_items,
+                "errors": errors
             }
             return Response(message, status=201)
 
