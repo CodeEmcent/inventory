@@ -4,15 +4,18 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.db import models  # Import models for aggregation
 from django.shortcuts import get_object_or_404
-from .models import InventoryItem
-from .serializers import InventoryItemSerializer
+from .models import Office, InventoryItem
+from .serializers import OfficeSerializer, InventoryItemSerializer
 from accounts.permissions import *
 from rest_framework.views import APIView
 from openpyxl import Workbook
 from django.http import HttpResponse
 from rest_framework.parsers import MultiPartParser, FormParser
 from openpyxl import load_workbook
-
+from accounts.permissions import IsAdminOrSuperAdmin
+from accounts.permissions import IsAssignedStaff
+from accounts.models import CustomUser
+from core.models import Office
 
 class InventoryViewSet(ModelViewSet):
     """
@@ -52,8 +55,8 @@ class InventoryViewSet(ModelViewSet):
         """
         Apply specific permissions for retrieve and destroy actions.
         """
-        if self.action in ['retrieve', 'destroy']:
-            self.permission_classes = [IsAssignedStaff]
+        if self.action in ['retrieve', 'update', 'destroy']:
+            self.permission_classes = [IsOwnerOrAdminOrStaff, IsAssignedStaff]
         else:
             self.permission_classes = [IsAdminOrSuperAdmin]
         return super().get_permissions()
@@ -70,25 +73,47 @@ class InventoryViewSet(ModelViewSet):
 class TemplateView(APIView):
     """
     Endpoint to download an Excel template for inventory import.
+    Staff members can only download templates for their assigned offices.
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAssignedStaff]
 
-    def get(self, request):
-        workbook = Workbook()
-        sheet = workbook.active
-        sheet.title = "Inventory Template"
+    def get(self, request, office_id):
+        try:
+            # Validate the office
+            office = Office.objects.get(id=office_id)
+            if office not in request.user.assigned_offices.all():
+                return Response({"error": "You do not have permission to download this template."}, status=403)
 
-        # Add headers
-        headers = ["Name", "Quantity", "Office"]
-        sheet.append(headers)
+            # Create the workbook and sheet
+            workbook = Workbook()
+            sheet = workbook.active
+            sheet.title = f"Template for {office.name}"
 
-        # Prepare response
-        response = HttpResponse(
-            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        )
-        response['Content-Disposition'] = 'attachment; filename=inventory_template.xlsx'
-        workbook.save(response)
-        return response
+            # Add the header rows
+            organization_name = request.user.organization.name if request.user.organization else "Unknown Organization"
+            sheet.append([organization_name])  # Row 1: Organization Name
+            sheet.append([f"Office: {office.name}", f"Description: {office.department}"])  # Row 2: Office Name and Description
+
+            # Add the column headers
+            headers = ["S/N", "Items", "Qty", "Description", "Remarks"]
+            sheet.append(headers)
+
+            # Add a footer with staff information
+            staff_name = request.user.username
+            sheet.append([])  # Leave a blank row
+            sheet.append([f"Staff Name:", f"{staff_name}"])
+
+            # Prepare the response
+            response = HttpResponse(
+                content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+            response['Content-Disposition'] = f'attachment; filename={office.name}_template.xlsx'
+            workbook.save(response)
+            return response
+
+        except Office.DoesNotExist:
+            return Response({"error": "Office not found."}, status=404)
+
 
 
 class ExportInventoryView(APIView):
@@ -185,3 +210,36 @@ class ImportInventoryView(APIView):
 
         except Exception as e:
             return Response({"error": str(e)}, status=500)
+
+
+class OfficeViewSet(ModelViewSet):
+    """
+    Handles CRUD operations for offices. Restricted to admins and superadmins.
+    """
+    queryset = Office.objects.all()
+    serializer_class = OfficeSerializer
+    permission_classes = [IsAuthenticated, IsAdminOrSuperAdmin]
+
+    def create(self, request, *args, **kwargs):
+        """
+        Create an office and return a success message.
+        """
+        response = super().create(request, *args, **kwargs)
+        response.data["message"] = "Office created successfully."
+        return response
+
+    def update(self, request, *args, **kwargs):
+        """
+        Update an office and return a success message.
+        """
+        response = super().update(request, *args, **kwargs)
+        response.data["message"] = "Office updated successfully."
+        return response
+
+    def destroy(self, request, *args, **kwargs):
+        """
+        Delete an office and return a success message.
+        """
+        office = self.get_object()
+        super().destroy(request, *args, **kwargs)
+        return Response({"message": f"Office '{office.name}' deleted successfully."}, status=200)

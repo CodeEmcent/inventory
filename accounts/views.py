@@ -1,9 +1,14 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework.permissions import AllowAny
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework_simplejwt.tokens import RefreshToken
-from .serializers import RegisterUserSerializer
+from .serializers import (
+    RegisterUserSerializer, 
+    OfficeAssignmentSerializer,
+    UserListSerializer
+)
+from accounts.permissions import IsAdminOrSuperAdmin
+from accounts.models import CustomUser
 
 class RegisterUserView(APIView):
     permission_classes = [AllowAny]
@@ -27,3 +32,49 @@ class LogoutView(APIView):
             return Response({"message": "Logout successful."}, status=200)
         except Exception as e:
             return Response({"error": str(e)}, status=400)
+
+
+class AllUsersView(APIView):
+    """
+    Endpoint to list all users (staff, admin, super admin).
+    Restricted to admins and super admins.
+    """
+    permission_classes = [IsAuthenticated, IsAdminOrSuperAdmin]
+
+    def get(self, request):
+        users = CustomUser.objects.filter(role='staff')  # Filter for staff only
+        serializer = UserListSerializer(users, many=True)
+        return Response({
+            "message": "All staff users retrieved successfully.",
+            "data": serializer.data
+        }, status=200)
+
+
+class AssignOfficesView(APIView):
+    """
+    Allows admins or superadmins to assign offices to staff.
+    """
+    permission_classes = [IsAuthenticated, IsAdminOrSuperAdmin]
+
+    def post(self, request, user_id):
+        try:
+            # Fetch the user
+            user = CustomUser.objects.get(id=user_id)
+
+            # Ensure the user is a staff member
+            if user.role != 'staff':
+                return Response({"error": "Only staff users can be assigned offices."}, status=400)
+
+            # Serialize and validate data
+            serializer = OfficeAssignmentSerializer(user, data=request.data, partial=True)
+            if serializer.is_valid():
+                serializer.save()
+                return Response({
+                    "message": f"Offices assigned successfully to {user.username}.",
+                    "data": serializer.data
+                }, status=200)
+
+            return Response(serializer.errors, status=400)
+
+        except CustomUser.DoesNotExist:
+            return Response({"error": "Staff user not found."}, status=404)
