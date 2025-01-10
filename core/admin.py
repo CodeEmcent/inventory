@@ -12,8 +12,8 @@ admin.site.register(Office, OfficeAdmin)
 
 
 class InventoryItemAdmin(admin.ModelAdmin):
-    list_display = ('id', 'name', 'quantity', 'user', 'created_at')
-    search_fields = ('name', 'user__username')  # Allows searching by item name and user
-    list_filter = ('created_at', 'user')        # Adds filtering options
+    list_display = ['name', 'user', 'office', 'quantity', 'created_at', 'updated_at']
+    search_fields = ['name', 'user__username', 'office__name']
+    list_filter = ['office', 'user']
 
 admin.site.register(InventoryItem, InventoryItemAdmin)
