@@ -1,3 +1,4 @@
+
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import (
@@ -5,7 +6,8 @@ from .views import (
     OfficeViewSet,
     TemplateView,
     ExportInventoryView, 
-    ImportInventoryView
+    ImportInventoryView,
+    BroadsheetView,
 )
 
 # Define the router and register the ViewSet
@@ -19,4 +21,5 @@ urlpatterns = [
     path('template/<int:office_id>/', TemplateView.as_view(), name='download-template'),
     path('export/', ExportInventoryView.as_view(), name='export-inventory'),
     path('import/', ImportInventoryView.as_view(), name='import-inventory'),
+    path('broadsheet/', BroadsheetView.as_view(), name='broadsheet'),
 ]
