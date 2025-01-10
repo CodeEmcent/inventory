@@ -78,3 +78,7 @@ class AssignOfficesView(APIView):
 
         except CustomUser.DoesNotExist:
             return Response({"error": "Staff user not found."}, status=404)
+
+    def get(self, request):
+        offices = request.user.assigned_offices.all().values('id', 'name', 'department')
+        return Response({"offices": list(offices)})
