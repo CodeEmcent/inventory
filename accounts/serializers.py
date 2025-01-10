@@ -23,7 +23,7 @@ class RegisterUserSerializer(serializers.ModelSerializer):
         user = CustomUser.objects.create_user(
             username=validated_data['username'],
             password=validated_data['password'],
-            role=validated_data.get('role', 'viewer'),
+            role=validated_data.get('role', 'staff'),
             organization=organization,
         )
         return user

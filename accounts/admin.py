@@ -6,7 +6,7 @@ from .models import CustomUser, Organization
 
 class CustomUserAdmin(UserAdmin):
     # List the fields to display in the user list page of the admin
-    list_display = ('username', 'email', 'role', 'organization', 'get_assigned_offices')
+    list_display = ('username', 'email', 'organization', 'get_assigned_offices')
 
     # Add the `assigned_offices` to the user edit form in the admin
     fieldsets = UserAdmin.fieldsets + (

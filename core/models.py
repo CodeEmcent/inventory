@@ -45,6 +45,7 @@ class InventoryItem(models.Model):
     )
     remarks = models.CharField(
         max_length=100,
+        default="Perfect",
         null=False,
         blank=False,
         help_text="Remarks on the item's condition (max 100 characters)."
