@@ -15,5 +15,5 @@ class InventoryItemSerializer(serializers.ModelSerializer):
 class OfficeSerializer(serializers.ModelSerializer):
     class Meta:
         model = Office
-        fields = ['id', 'name', 'department', 'created_at']
+        fields = ['id', 'name', 'department', 'user', 'created_at']
         read_only_fields = ['created_at']

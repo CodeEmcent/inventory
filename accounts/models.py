@@ -13,7 +13,6 @@ class Organization(models.Model):
     def __str__(self):
         return self.name
 
-
 class CustomUserManager(BaseUserManager):
     def create_user(self, username: str, email: str = None, password: str = None, role: str = 'staff', **extra_fields):
         if not username:

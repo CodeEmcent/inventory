@@ -6,7 +6,7 @@ from .models import CustomUser, Organization
 
 class CustomUserAdmin(UserAdmin):
     # List the fields to display in the user list page of the admin
-    list_display = ('username', 'email', 'organization', 'get_assigned_offices')
+    list_display = ('username', 'email', 'role', 'organization', 'get_assigned_offices')
 
     # Add the `assigned_offices` to the user edit form in the admin
     fieldsets = UserAdmin.fieldsets + (
@@ -22,6 +22,11 @@ class CustomUserAdmin(UserAdmin):
     # Make sure you have the proper filtering options
     search_fields = ('username', 'email', 'role')
     filter_horizontal = ('assigned_offices',)  # Allows better UI for selecting offices in the admin
+
+    def save_model(self, request, obj, form, change):
+        if not request.user.is_superuser:
+            raise ValueError("Only super admins can assign admin or super admin roles.")
+        super().save_model(request, obj, form, change)
 
 # Registering the CustomUser model with the custom UserAdmin
 admin.site.register(CustomUser, CustomUserAdmin)
