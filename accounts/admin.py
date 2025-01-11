@@ -31,3 +31,4 @@ class CustomUserAdmin(UserAdmin):
 # Registering the CustomUser model with the custom UserAdmin
 admin.site.register(CustomUser, CustomUserAdmin)
 admin.site.register(Organization)
+

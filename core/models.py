@@ -7,12 +7,6 @@ class Office(models.Model):
     """
     name = models.CharField(max_length=255, unique=True)  # Unique names for offices
     department = models.CharField(max_length=255, null=True, blank=True)
-    user = models.ForeignKey(
-        CustomUser,
-        on_delete=models.CASCADE,
-        related_name="office",
-        help_text="The user managing this office."
-    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):

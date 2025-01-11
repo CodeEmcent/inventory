@@ -10,6 +10,8 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.1/ref/settings/
 """
 
+
+
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -26,7 +28,8 @@ SECRET_KEY = "django-insecure-126)c+srfs(31*3!#(lpqgmjb&c-re@gm!^rxj51+47e#o)1*2
 DEBUG = True
 
 ALLOWED_HOSTS = []
-
+# settings.py
+APPEND_SLASH = True  # Ensures Django redirects URLs without trailing slashes.
 
 # Application definition
 
@@ -42,7 +45,8 @@ DJANGO_APPS = [
 # Third party apps
 THIRD_PARTY_APPS = [
     "rest_framework",
-    'rest_framework_simplejwt.token_blacklist',
+    "rest_framework_simplejwt.token_blacklist",
+    "django_extensions",
 ]
 
 # Custom apps
