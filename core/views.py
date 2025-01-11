@@ -280,14 +280,6 @@ class ExportInventoryView(APIView):
 
 
 # --- Broadsheet View ---
-from openpyxl import Workbook
-from openpyxl.styles import Font, Alignment
-from openpyxl.utils import get_column_letter
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from django.http import HttpResponse
-from .models import InventoryItem  # Ensure you have this import
-
 class BroadsheetView(APIView):
     """
     API to collate inventory data across all offices and provide analytics.
