@@ -2,102 +2,63 @@ from rest_framework.viewsets import ModelViewSet
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from django.db import models  # Import models for aggregation
-from django.shortcuts import get_object_or_404
-from .models import Office, InventoryItem
-from .serializers import OfficeSerializer, InventoryItemSerializer
-from accounts.permissions import *
 from rest_framework.views import APIView
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font
+from openpyxl.utils import get_column_letter
 from django.http import HttpResponse
 from rest_framework.parsers import MultiPartParser, FormParser
 from openpyxl import load_workbook
+from django.shortcuts import get_object_or_404
+from django.db.models import Sum, Avg, Count
+from .models import Office, InventoryItem
+from .serializers import OfficeSerializer, InventoryItemSerializer
 from accounts.permissions import (
     IsAdminOrStaffOrReadOnly,
     IsAdminOrSuperAdmin,
     IsOwnerOrAdminOrStaff,
     IsAssignedStaff
 )
-from accounts.models import CustomUser
-from core.models import Office
-from django.db.models import Sum, Avg, Count
 
-
-
+# --- Office ViewSet ---
 class OfficeViewSet(ModelViewSet):
-    """
-    Handles CRUD operations for offices. Restricted to admins and superadmins.
-    """
     queryset = Office.objects.all()
     serializer_class = OfficeSerializer
     permission_classes = [IsAuthenticated, IsAdminOrSuperAdmin]
 
     def create(self, request, *args, **kwargs):
-        """
-        Create an office and return a success message.
-        """
         response = super().create(request, *args, **kwargs)
         response.data["message"] = "Office created successfully."
         return response
 
     def update(self, request, *args, **kwargs):
-        """
-        Update an office and return a success message.
-        """
         response = super().update(request, *args, **kwargs)
         response.data["message"] = "Office updated successfully."
         return response
 
     def destroy(self, request, *args, **kwargs):
-        """
-        Delete an office and return a success message.
-        """
         office = self.get_object()
         super().destroy(request, *args, **kwargs)
         return Response({"message": f"Office '{office.name}' deleted successfully."}, status=200)
 
-
+# --- Inventory ViewSet ---
 class InventoryViewSet(ModelViewSet):
-    """
-    Handles CRUD operations for inventory items.
-    """
     queryset = InventoryItem.objects.all()
     serializer_class = InventoryItemSerializer
     permission_classes = [IsAuthenticated, IsAdminOrStaffOrReadOnly]
 
-    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
-    def my_items(self, request):
-        """
-        Retrieve inventory items owned by the requesting user.
-        """
-        queryset = self.get_queryset().filter(user=request.user)
-        serializer = self.get_serializer(queryset, many=True)
-        return Response(serializer.data)
-
-    @action(detail=False, methods=['get'], permission_classes=[IsAdminOrSuperAdmin])
-    def broadsheet(self, request):
-        """
-        Aggregated inventory data for the entire organization.
-        """
-        data = InventoryItem.objects.values('name').annotate(
-            total_quantity=Sum('quantity'),
-            total_items=Sum('quantity')  # Total count of items
-        )
-        return Response(data)
-
     def get_queryset(self):
-        """
-        Restrict staff users to only see items in their assigned offices.
-        """
+        office_id = self.request.query_params.get('office_id')
         if self.request.user.role == 'staff':
-            return InventoryItem.objects.filter(office__in=self.request.user.assigned_offices.all())
+            if not office_id:
+                return InventoryItem.objects.none()
+            office = get_object_or_404(Office, id=office_id)
+            if office not in self.request.user.assigned_offices.all():
+                return InventoryItem.objects.none()
+            return InventoryItem.objects.filter(office=office)
         return InventoryItem.objects.all()
 
     def get_permissions(self):
-        """
-        Apply specific permissions based on actions.
-        """
         if self.action in ['retrieve', 'update', 'destroy']:
             self.permission_classes = [IsOwnerOrAdminOrStaff, IsAssignedStaff]
         elif self.action == 'create':
@@ -107,209 +68,205 @@ class InventoryViewSet(ModelViewSet):
         return super().get_permissions()
 
     def destroy(self, request, *args, **kwargs):
-        """
-        Add a custom success message on item deletion.
-        """
         instance = self.get_object()
         self.perform_destroy(instance)
         return Response({"message": f"Item '{instance.name}' successfully deleted."}, status=200)
 
-
-
+# --- Template View ---
 class TemplateView(APIView):
-    """
-    Endpoint to download an Excel template for inventory import.
-    Staff members can only download templates for their assigned offices.
-    """
     permission_classes = [IsAuthenticated, IsAssignedStaff]
-
+    
     def get(self, request, office_id):
-        try:
-            # Validate the office
-            office = Office.objects.get(id=office_id)
-            if office not in request.user.assigned_offices.all():
-                return Response({"error": "You do not have permission to download this template."}, status=403)
+        office = get_object_or_404(Office, id=office_id)
+        
+        # Check if the user is an admin or superadmin
+        if request.user.role in ('admin', 'super_admin'):
+            # If user is an admin or superadmin, allow access to any office
+            pass
+        elif office not in request.user.assigned_offices.all():
+            # If user is not an admin/superadmin, check if the user is assigned to the office
+            return Response({"error": "You do not have permission to download this template."}, status=403)
 
-            # Create the workbook and sheet
-            workbook = Workbook()
-            sheet = workbook.active
-            sheet.title = f"Template for {office.name}"
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.title = f"Template for {office.name}"
 
-            # Styling configurations
-            header_font = Font(bold=True, size=14)
-            centered_alignment = Alignment(horizontal="center", vertical="center")
+        header_font = Font(bold=True, size=14)
+        centered_alignment = Alignment(horizontal="center", vertical="center")
 
-            # Add the first row (Organization Name)
-            organization_name = request.user.organization.name if request.user.organization else "Unknown Organization"
-            sheet.merge_cells(start_row=1, start_column=1, end_row=1, end_column=5)
-            sheet.cell(row=1, column=1).value = organization_name
-            sheet.cell(row=1, column=1).font = header_font
-            sheet.cell(row=1, column=1).alignment = centered_alignment
+        organization_name = request.user.organization.name if request.user.organization else "Unknown Organization"
+        sheet.merge_cells(start_row=1, start_column=1, end_row=1, end_column=5)
+        sheet.cell(row=1, column=1).value = organization_name
+        sheet.cell(row=1, column=1).font = header_font
+        sheet.cell(row=1, column=1).alignment = centered_alignment
 
-            # Add the second row (Office Name and Description)
-            sheet.merge_cells(start_row=2, start_column=1, end_row=2, end_column=5)
-            office_description = f"Office: {office.name} | Description: {office.department}"
-            sheet.cell(row=2, column=1).value = office_description
-            sheet.cell(row=2, column=1).font = header_font
-            sheet.cell(row=2, column=1).alignment = centered_alignment
+        sheet.merge_cells(start_row=2, start_column=1, end_row=2, end_column=5)
+        office_description = f"Office: {office.name} | Description: {office.department or 'No Description'}"
+        sheet.cell(row=2, column=1).value = office_description
+        sheet.cell(row=2, column=1).font = header_font
+        sheet.cell(row=2, column=1).alignment = centered_alignment
 
-            # Add the column headers
-            headers = ["S/N", "Items", "Qty", "Description (Optional)", "Remarks"]
-            for col_num, header in enumerate(headers, start=1):
-                cell = sheet.cell(row=3, column=col_num)
-                cell.value = header
-                cell.font = Font(bold=True)
-                cell.alignment = Alignment(horizontal="center", vertical="center")
+        headers = ["S/N", "Items", "Qty", "Description (Optional)", "Remarks"]
+        for col_num, header in enumerate(headers, start=1):
+            cell = sheet.cell(row=3, column=col_num)
+            cell.value = header
+            cell.font = Font(bold=True)
+            cell.alignment = Alignment(horizontal="center", vertical="center")
 
-            # Add a footer with staff information
-            staff_name = request.user.username
-            sheet.append([])  # Leave a blank row
-            sheet.append([f"Signature: {staff_name}", "This must match the username of the uploader."])
-            sheet.merge_cells(start_row=5, start_column=1, end_row=5, end_column=5)
-            sheet.cell(row=5, column=1).alignment = centered_alignment
+        staff_name = request.user.username
+        sheet.append([])
+        sheet.append([f"Signature: {staff_name}", "This must match the username of the uploader."])
+        sheet.merge_cells(start_row=5, start_column=1, end_row=5, end_column=5)
+        sheet.cell(row=5, column=1).alignment = centered_alignment
 
-            # Prepare the response
-            response = HttpResponse(
-                content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            )
-            response['Content-Disposition'] = f'attachment; filename={office.name}_template.xlsx'
-            workbook.save(response)
-            return response
+        response = HttpResponse(content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        response['Content-Disposition'] = f'attachment; filename={office.name}_template.xlsx'
+        workbook.save(response)
+        return response
 
-        except Office.DoesNotExist:
-            return Response({"error": "Office not found."}, status=404)
-
-
+# --- Import Inventory View ---
 class ImportInventoryView(APIView):
-    """
-    View to handle importing inventory items from an Excel file.
-    """
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
         file_obj = request.FILES.get('file', None)
+        office_id = request.query_params.get('office_id')
+
         if not file_obj:
             return Response({"error": "No file uploaded."}, status=400)
+        if not office_id:
+            return Response({"error": "Office ID is required."}, status=400)
 
-        try:
-            # Load the workbook and validate structure
-            workbook = load_workbook(file_obj)
-            sheet = workbook.active
+        office = get_object_or_404(Office, id=office_id)
+        if office not in request.user.assigned_offices.all():
+            return Response({"error": "You do not have permission to manage this office."}, status=403)
 
-            # Validate headers
-            headers = ["S/N", "Items", "Qty", "Description (Optional)", "Remarks"]
-            if [cell.value for cell in sheet[3]] != headers:
-                return Response({"error": "Invalid template format. Please use the correct template."}, status=400)
+        workbook = load_workbook(file_obj)
+        sheet = workbook.active
 
-            # Process rows
-            imported_items = []
-            updated_items = []
-            errors = []
-            office = request.user.assigned_offices.first()
+        headers = ["S/N", "Items", "Qty", "Description (Optional)", "Remarks"]
+        if [cell.value for cell in sheet[3]] != headers:
+            return Response({"error": "Invalid template format. Please use the correct template."}, status=400)
 
-            for i, row in enumerate(sheet.iter_rows(min_row=4, values_only=True)):  # Skip header
-                serial_number, item_name, quantity, description, remarks = row
+        # Process rows excluding the signature row
+        imported_items, updated_items = [], []
+        for i, row in enumerate(sheet.iter_rows(min_row=4, max_row=sheet.max_row - 1, values_only=True)):
+            serial_number, item_name, quantity, description, remarks = row
 
-                if not item_name or not isinstance(quantity, int):
-                    errors.append({"row": i + 4, "error": "Invalid data in required fields."})
-                    continue
+            if not item_name or not isinstance(quantity, int):
+                return Response({"error": f"Invalid data in row {i + 4}."}, status=400)
 
-                # Normalize and validate the data
-                item_name = item_name.strip().title()
-                description = description[:100] if description else None
-                remarks = remarks[:100] if remarks else None
+            item_name = item_name.strip().title()
+            description = description[:100] if description else None
+            remarks = remarks[:100] if remarks else None
 
-                # Check for existing item
-                existing_item = InventoryItem.objects.filter(
-                    user=request.user, office=office, name=item_name
-                ).first()
+            existing_item = InventoryItem.objects.filter(
+                user=request.user, office=office, name=item_name
+            ).first()
 
-                if existing_item:
-                    # Update existing item's quantity
-                    existing_item.quantity = quantity
-                    existing_item.save()
-                    updated_items.append(item_name)
-                else:
-                    # Create new inventory item
-                    imported_items.append(InventoryItem(
-                        user=request.user,
-                        office=office,
-                        name=item_name,
-                        quantity=quantity,
-                        description=description,
-                    ))
+            if existing_item:
+                existing_item.quantity = quantity
+                existing_item.description = description
+                existing_item.remarks = remarks
+                existing_item.save()
+                updated_items.append(existing_item.name)
+            else:
+                imported_items.append(InventoryItem(
+                    user=request.user,
+                    office=office,
+                    name=item_name,
+                    quantity=quantity,
+                    description=description,
+                    remarks=remarks,
+                ))
 
-            # Bulk create new items
-            InventoryItem.objects.bulk_create(imported_items)
-
-            # Response message
-            return Response({
-                "message": "Inventory imported successfully.",
-                "new_items": len(imported_items),
-                "updated_items": updated_items,
-                "errors": errors,
-            }, status=201)
-
-        except Office.DoesNotExist:
-            return Response({"error": "Assigned office not found."}, status=404)
-
-        except Exception as e:
-            return Response({"error": str(e)}, status=500)
+        InventoryItem.objects.bulk_create(imported_items)
+        return Response({
+            "message": "Inventory imported successfully.",
+            "new_items": len(imported_items),
+            "updated_items": updated_items
+        }, status=201)
 
 
+# --- Export Inventory View ---
 class ExportInventoryView(APIView):
     """
-    View to export all inventory items to an Excel file.
+    View to export all inventory items to an Excel file with enhanced structure.
     """
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        # Query inventory items visible to the user
-        if request.user.role == 'staff':
-            inventory_items = InventoryItem.objects.filter(
-                user=request.user, office__in=request.user.assigned_offices.all()
-            )
-        else:
-            inventory_items = InventoryItem.objects.all()  # Admins and superadmins can export all items
+        office_id = request.query_params.get('office_id')
 
-        # Create a workbook and worksheet
+        # Filter inventory items based on the role and office
+        if request.user.role == 'staff':
+            if not office_id:
+                return Response({"error": "Office ID is required to export inventory."}, status=400)
+            office = Office.objects.filter(id=office_id, assigned_users=request.user).first()
+            if not office:
+                return Response({"error": "You do not have permission to export inventory for this office."}, status=403)
+            inventory_items = InventoryItem.objects.filter(user=request.user, office=office)
+        else:
+            inventory_items = InventoryItem.objects.all()
+            office = None  # Admins/Superadmins can export for all offices
+
+        # Create the workbook and worksheet
         workbook = Workbook()
         sheet = workbook.active
         sheet.title = "Inventory Items"
 
-        # Add title row
-        organization_name = request.user.organization.name if request.user.organization else "Unknown Organization"
-        sheet.append([f"Inventory Export for {organization_name}"])
-        sheet.merge_cells(start_row=1, start_column=1, end_row=1, end_column=7)
-        sheet.cell(row=1, column=1).font = Font(bold=True, size=14)
-        sheet.cell(row=1, column=1).alignment = Alignment(horizontal="center", vertical="center")
+        # Header Font and Alignment
+        header_font = Font(bold=True, size=14)
+        centered_alignment = Alignment(horizontal="center", vertical="center")
 
-        # Add header row
-        headers = ["ID", "Name", "Quantity", "Office", "Description", "Remarks", "User", "Created At", "Updated At"]
+        # Add organization name as the first row
+        organization_name = request.user.organization.name if request.user.organization else "Unknown Organization"
+        sheet.merge_cells(start_row=1, start_column=1, end_row=1, end_column=5)
+        sheet.cell(row=1, column=1).value = organization_name
+        sheet.cell(row=1, column=1).font = header_font
+        sheet.cell(row=1, column=1).alignment = centered_alignment
+
+        # Add office name and department as the second row
+        if office:
+            office_details = f"Office: {office.name} | Department: {office.department or 'No Department'}"
+        else:
+            office_details = "All Offices (Admin/Superadmin Export)"
+        sheet.merge_cells(start_row=2, start_column=1, end_row=2, end_column=5)
+        sheet.cell(row=2, column=1).value = office_details
+        sheet.cell(row=2, column=1).font = header_font
+        sheet.cell(row=2, column=1).alignment = centered_alignment
+
+        # Add column headers
+        headers = ["S/N", "Name", "Quantity", "Description", "Remarks", "Created At", "Updated At"]
         sheet.append(headers)
 
-        # Style header row
+        # Style the column headers
         for col_num, header in enumerate(headers, start=1):
-            cell = sheet.cell(row=2, column=col_num)
+            cell = sheet.cell(row=3, column=col_num)
             cell.font = Font(bold=True)
             cell.alignment = Alignment(horizontal="center", vertical="center")
 
         # Add data rows
-        for item in inventory_items:
+        for idx, item in enumerate(inventory_items, start=1):
             sheet.append([
-                item.id,
+                idx,
                 item.name,
                 item.quantity,
-                item.office.name,
                 item.description or "N/A",
                 item.remarks or "N/A",
-                item.user.username,
                 item.created_at.strftime("%Y-%m-%d %H:%M:%S"),
                 item.updated_at.strftime("%Y-%m-%d %H:%M:%S"),
             ])
 
+        # Add staff name as the footer
+        staff_name = request.user.username
+        sheet.append([])  # Leave a blank row
+        sheet.append([f"Exported by: {staff_name}"])
+        sheet.merge_cells(start_row=sheet.max_row, start_column=1, end_row=sheet.max_row, end_column=5)
+        sheet.cell(row=sheet.max_row, column=1).alignment = centered_alignment
+
         # Adjust column widths for better readability
-        column_widths = [10, 20, 10, 15, 30, 30, 15, 20, 20]
+        column_widths = [10, 30, 10, 30, 30, 20, 20]
         for i, width in enumerate(column_widths, start=1):
             sheet.column_dimensions[chr(64 + i)].width = width  # Convert 1 to 'A', 2 to 'B', etc.
 
@@ -322,16 +279,31 @@ class ExportInventoryView(APIView):
         return response
 
 
-
+# --- Broadsheet View ---
 class BroadsheetView(APIView):
     """
     API to collate inventory data across all offices and provide analytics.
+    Accessible only to admins and superadmins.
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAdminOrSuperAdmin]
 
-    def get(self, request, format=None):
+    def get(self, request, *args, **kwargs):
+        print("BroadsheetView accessed")  # Debugging
+
         # Perform data aggregation
-        inventory_data = InventoryItem.objects.values(
+        inventory_data = self.get_inventory_data(request)
+        office_summary = self.get_office_summary(request)
+        grand_totals = self.get_grand_totals()
+
+        # Generate and return Excel
+        print("Generating Excel")  # Debugging
+        return self.generate_excel(inventory_data, office_summary, grand_totals)
+
+    def get_inventory_data(self, request):
+        """
+        Fetch inventory data aggregated by office and item.
+        """
+        return InventoryItem.objects.values(
             'office__name', 'name'
         ).annotate(
             total_quantity=Sum('quantity'),
@@ -339,33 +311,25 @@ class BroadsheetView(APIView):
             average_quantity=Avg('quantity')
         ).order_by('office__name', 'name')
 
-        # Office-wise summary
-        office_summary = InventoryItem.objects.values('office__name').annotate(
+    def get_office_summary(self, request):
+        """
+        Fetch summary data aggregated by office.
+        """
+        return InventoryItem.objects.values('office__name').annotate(
             total_quantity=Sum('quantity'),
             total_items=Count('id'),
             average_quantity=Avg('quantity')
         ).order_by('office__name')
 
-        # Grand totals
-        grand_totals = InventoryItem.objects.aggregate(
+    def get_grand_totals(self):
+        """
+        Fetch grand totals across all offices.
+        """
+        return InventoryItem.objects.aggregate(
             total_quantity=Sum('quantity'),
             total_items=Count('id'),
             average_quantity=Avg('quantity')
         )
-
-        # JSON response for the broadsheet
-        if format == 'json':
-            return Response({
-                "inventory_data": list(inventory_data),
-                "office_summary": list(office_summary),
-                "grand_totals": grand_totals
-            })
-
-        # Excel export for the broadsheet
-        elif format == 'excel':
-            return self.generate_excel(inventory_data, office_summary, grand_totals)
-
-        return Response({"error": "Invalid format. Use 'json' or 'excel'."}, status=400)
 
     def generate_excel(self, inventory_data, office_summary, grand_totals):
         """
@@ -375,13 +339,13 @@ class BroadsheetView(APIView):
         sheet = workbook.active
         sheet.title = "Broadsheet"
 
-        # Add title row
+        # Title row
         sheet.append(["Broadsheet Report"])
         sheet.merge_cells(start_row=1, start_column=1, end_row=1, end_column=6)
         sheet.cell(row=1, column=1).font = Font(bold=True, size=14)
         sheet.cell(row=1, column=1).alignment = Alignment(horizontal="center", vertical="center")
 
-        # Add inventory data section
+        # Inventory data section
         sheet.append([])  # Blank row
         sheet.append(["Inventory Data"])
         sheet.append(["Office", "Item", "Total Quantity", "Total Items", "Average Quantity"])
@@ -394,7 +358,7 @@ class BroadsheetView(APIView):
                 round(item['average_quantity'], 2) if item['average_quantity'] else 0,
             ])
 
-        # Add office summary section
+        # Office summary section
         sheet.append([])  # Blank row
         sheet.append(["Office Summary"])
         sheet.append(["Office", "Total Quantity", "Total Items", "Average Quantity"])
@@ -406,7 +370,7 @@ class BroadsheetView(APIView):
                 round(office['average_quantity'], 2) if office['average_quantity'] else 0,
             ])
 
-        # Add grand totals
+        # Grand totals
         sheet.append([])  # Blank row
         sheet.append(["Grand Totals"])
         sheet.append([
@@ -416,8 +380,8 @@ class BroadsheetView(APIView):
         ])
 
         # Adjust column widths
-        for col in range(1, 7):
-            sheet.column_dimensions[chr(64 + col)].width = 20
+        for col in range(1, 7):  # Columns A to F
+            sheet.column_dimensions[get_column_letter(col)].width = 20  # Use the imported function
 
         # Prepare the response
         response = HttpResponse(
@@ -425,4 +389,6 @@ class BroadsheetView(APIView):
         )
         response['Content-Disposition'] = 'attachment; filename=broadsheet.xlsx'
         workbook.save(response)
+
+        # Return the response
         return response

@@ -42,7 +42,12 @@ class AllUsersView(APIView):
     permission_classes = [IsAuthenticated, IsAdminOrSuperAdmin]
 
     def get(self, request):
-        users = CustomUser.objects.filter(role='staff')  # Filter for staff only
+        # Admins and Superadmins can see all users (staff, admin, super_admin)
+        if request.user.role in ['admin', 'super_admin']:
+            users = CustomUser.objects.all()  # Fetch all users
+        else:
+            users = CustomUser.objects.filter(role='staff')  # Only fetch staff users for non-admins
+
         serializer = UserListSerializer(users, many=True)
         return Response({
             "message": "All staff users retrieved successfully.",

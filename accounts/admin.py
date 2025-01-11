@@ -23,6 +23,12 @@ class CustomUserAdmin(UserAdmin):
     search_fields = ('username', 'email', 'role')
     filter_horizontal = ('assigned_offices',)  # Allows better UI for selecting offices in the admin
 
+    def save_model(self, request, obj, form, change):
+        if not request.user.is_superuser:
+            raise ValueError("Only super admins can assign admin or super admin roles.")
+        super().save_model(request, obj, form, change)
+
 # Registering the CustomUser model with the custom UserAdmin
 admin.site.register(CustomUser, CustomUserAdmin)
 admin.site.register(Organization)
+
