@@ -1,4 +1,5 @@
 from django.urls import path
+from django.urls import path
 from rest_framework.routers import DefaultRouter
 from .views import (
     OfficeViewSet,
@@ -16,6 +17,7 @@ from .views import (
 
 router = DefaultRouter()
 router.register(r'offices', OfficeViewSet, basename='offices')
+router.register(r'offices', OfficeViewSet, basename='offices')
 router.register(r'inventory', InventoryViewSet, basename='inventory')
 router.register(r'item-registry', ItemRegistryViewSet, basename='item-registry')
 
@@ -27,6 +29,7 @@ urlpatterns = router.urls + [
     path('registry/download/', RegistryDownloadView.as_view(), name='item-registry-download'),
     # Inventory Template URLs
     path('template/<int:office_id>/', TemplateView.as_view(), name='download-template'),
+    path('import/', ImportInventoryView.as_view(), name='import-inventory'),
     path('import/', ImportInventoryView.as_view(), name='import-inventory'),
     path('export/', ExportInventoryView.as_view(), name='export-inventory'),
     # Inventory Broadsheet URLs

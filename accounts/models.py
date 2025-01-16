@@ -2,6 +2,7 @@ from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.db import models
 from django.apps import apps
 
+
 class Organization(models.Model):
     """
     Represents an organization that users belong to.
@@ -12,6 +13,27 @@ class Organization(models.Model):
 
     def __str__(self):
         return self.name
+
+class CustomUserManager(BaseUserManager):
+    def create_user(self, username: str, email: str = None, password: str = None, role: str = 'staff', **extra_fields):
+        if not username:
+            raise ValueError("The Username field must be set")
+        email = self.normalize_email(email)
+        user = self.model(username=username, email=email, role=role, **extra_fields)
+        user.set_password(password)
+        user.save(using=self._db)
+        return user
+
+    def create_superuser(self, username: str, email: str = None, password: str = None, **extra_fields):
+        extra_fields.setdefault('is_staff', True)
+        extra_fields.setdefault('is_superuser', True)
+
+        if not extra_fields.get('is_staff'):
+            raise ValueError("Superuser must have is_staff=True.")
+        if not extra_fields.get('is_superuser'):
+            raise ValueError("Superuser must have is_superuser=True.")
+
+        return self.create_user(username, email, password, role='super_admin', **extra_fields)
 
 
 class CustomUserManager(BaseUserManager):

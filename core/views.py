@@ -7,6 +7,7 @@ from rest_framework.views import APIView
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font
 from openpyxl.utils import get_column_letter
+from openpyxl.utils import get_column_letter
 from django.http import HttpResponse
 from rest_framework.parsers import MultiPartParser, FormParser
 import csv
@@ -24,6 +25,7 @@ from accounts.permissions import (
     IsAssignedStaff
 )
 
+# --- Office ViewSet ---
 # --- Office ViewSet ---
 class OfficeViewSet(ModelViewSet):
     queryset = Office.objects.all()
@@ -352,9 +354,10 @@ class InventoryViewSet(ModelViewSet):
         return Response({"message": f"Item '{instance.item.name}' successfully deleted."}, status=200)
 
 # --- Template View ---
+# --- Template View ---
 class TemplateView(APIView):
     permission_classes = [IsAuthenticated, IsAssignedStaff]
-
+    
     def get(self, request, office_id):
         office = get_object_or_404(Office, id=office_id)
 
@@ -432,8 +435,19 @@ class ImportInventoryView(APIView):
         file_obj = request.FILES.get('file', None)
         office_id = request.query_params.get('office_id')
 
+        office_id = request.query_params.get('office_id')
+
         if not file_obj:
             return Response({"error": "No file uploaded."}, status=400)
+        if not office_id:
+            return Response({"error": "Office ID is required."}, status=400)
+
+        office = get_object_or_404(Office, id=office_id)
+        if office not in request.user.assigned_offices.all():
+            return Response({"error": "You do not have permission to manage this office."}, status=403)
+
+        workbook = load_workbook(file_obj)
+        sheet = workbook.active
         if not office_id:
             return Response({"error": "Office ID is required."}, status=400)
 
@@ -551,10 +565,16 @@ class ExportInventoryView(APIView):
                 office = None  # Admins/Superadmins can export for all offices
 
         # Create the workbook and worksheet
+        # Create the workbook and worksheet
         workbook = Workbook()
         sheet = workbook.active
         sheet.title = "Inventory Items"
 
+        # Header Font and Alignment
+        header_font = Font(bold=True, size=14)
+        centered_alignment = Alignment(horizontal="center", vertical="center")
+
+        # Add organization name as the first row
         # Header Font and Alignment
         header_font = Font(bold=True, size=14)
         centered_alignment = Alignment(horizontal="center", vertical="center")
@@ -581,7 +601,9 @@ class ExportInventoryView(APIView):
         sheet.append(headers)
 
         # Style the column headers
+        # Style the column headers
         for col_num, header in enumerate(headers, start=1):
+            cell = sheet.cell(row=3, column=col_num)
             cell = sheet.cell(row=3, column=col_num)
             cell.font = Font(bold=True)
             cell.alignment = Alignment(horizontal="center", vertical="center")
@@ -984,4 +1006,6 @@ class BroadsheetView(APIView):
         )
         response['Content-Disposition'] = f'attachment; filename=broadsheet_{year}.xlsx'
         workbook.save(response)
+
+        # Return the response
         return response
