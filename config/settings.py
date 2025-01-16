@@ -27,6 +27,8 @@ DEBUG = True
 
 ALLOWED_HOSTS = []
 
+# settings.py
+APPEND_SLASH = True  # Ensures Django redirects URLs without trailing slashes.
 
 # Application definition
 
@@ -43,17 +45,16 @@ DJANGO_APPS = [
 THIRD_PARTY_APPS = [
     "rest_framework",
     'rest_framework_simplejwt.token_blacklist',
+    "django_extensions",
+    "debug_toolbar",
+    "drf_yasg",
+    "corsheaders",
 ]
 
 # Custom apps
 PROJECT_APPS = [
     "core.apps.CoreConfig",
     "accounts.apps.AccountsConfig",
-    # "course.apps.CourseConfig",
-    # "result.apps.ResultConfig",
-    # "search.apps.SearchConfig",
-    # "quiz.apps.QuizConfig",
-    # "payments.apps.PaymentsConfig",
 ]
 
 # Combine all apps
@@ -68,6 +69,8 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "debug_toolbar.middleware.DebugToolbarMiddleware",
+    "corsheaders.middleware.CorsMiddleware"
 ]
 
 ROOT_URLCONF = "config.urls"
@@ -89,6 +92,8 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = "config.wsgi.application"
+
+CORS_ALLOW_ALL_ORIGINS = True  # Use with caution in production
 
 
 # Database

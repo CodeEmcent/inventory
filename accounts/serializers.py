@@ -1,15 +1,42 @@
 from rest_framework import serializers
-from .models import CustomUser, Organization
-from rest_framework import serializers
-from accounts.models import CustomUser
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from rest_framework_simplejwt.views import TokenObtainPairView
+from rest_framework.exceptions import AuthenticationFailed
+from django.contrib.auth import get_user_model
+from accounts.models import CustomUser, Profile, Organization
 from core.models import Office
+
+User = get_user_model()
+
+class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
+    def validate(self, attrs):
+        username_or_email = attrs.get("username")
+        password = attrs.get("password")
+
+        try:
+            # Attempt to find user by email
+            user = User.objects.get(email=username_or_email)
+        except User.DoesNotExist:
+            try:
+                # Fallback to username
+                user = User.objects.get(username=username_or_email)
+            except User.DoesNotExist:
+                raise AuthenticationFailed("Invalid credentials")
+
+        # Set the username for further validation
+        attrs["username"] = user.username
+        return super().validate(attrs)
+
+class CustomTokenObtainPairView(TokenObtainPairView):
+    serializer_class = CustomTokenObtainPairSerializer
+
 
 class RegisterUserSerializer(serializers.ModelSerializer):
     organization = serializers.CharField(required=False)
 
     class Meta:
         model = CustomUser
-        fields = ['username', 'password', 'role', 'organization']
+        fields = ['username', 'password', 'organization']
         extra_kwargs = {'password': {'write_only': True}}
 
     def create(self, validated_data):
@@ -23,16 +50,33 @@ class RegisterUserSerializer(serializers.ModelSerializer):
         user = CustomUser.objects.create_user(
             username=validated_data['username'],
             password=validated_data['password'],
-            role=validated_data.get('role', 'viewer'),
             organization=organization,
         )
         return user
 
+
+class ProfileSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Profile
+        fields = ['organization', 'profile_picture', 'bio']
+
+    def update(self, instance, validated_data):
+        # Update profile fields
+        instance.organization = validated_data.get('organization', instance.organization)
+        instance.profile_picture = validated_data.get('profile_picture', instance.profile_picture)
+        instance.bio = validated_data.get('bio', instance.bio)
+        instance.save()
+        return instance
+
+
 class UserListSerializer(serializers.ModelSerializer):
+    profile = ProfileSerializer()  # Nested ProfileSerializer to include profile information
+    organization = serializers.StringRelatedField()  # Displaying the name of the organization
+
     class Meta:
         model = CustomUser
-        fields = ['id', 'username', 'role', 'organization', 'assigned_offices']
-        depth = 1  # Expand relationships (e.g., organization, offices)
+        fields = ['id', 'username', 'email', 'role', 'profile', 'organization', 'assigned_offices']
+        depth = 1  # Expands related fields like organization and assigned_offices for detailed view
 
 
 class OfficeAssignmentSerializer(serializers.ModelSerializer):

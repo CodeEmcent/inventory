@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import InventoryItem, Office
+from .models import InventoryItem, Office, ItemRegistry
 
 # Register your models here.
 
@@ -11,9 +11,26 @@ class OfficeAdmin(admin.ModelAdmin):
 admin.site.register(Office, OfficeAdmin)
 
 
-class InventoryItemAdmin(admin.ModelAdmin):
-    list_display = ['name', 'user', 'office', 'quantity', 'created_at', 'updated_at']
-    search_fields = ['name', 'user__username', 'office__name']
-    list_filter = ['office', 'user']
+# Optional: Customize how the model appears in the admin
+class ItemRegistryAdmin(admin.ModelAdmin):
+    list_display = ('stock_id', 'name', 'description', 'created_at')  # Display these fields in the list view
+    search_fields = ('stock_id', 'name')  # Allow searching by stock_id and name
+    list_filter = ('created_at',)  # Filter by created_at in the admin interface
+    ordering = ('created_at',)  # Order by created_at by default
 
+# Register the model with the custom admin class
+admin.site.register(ItemRegistry, ItemRegistryAdmin)
+
+
+class InventoryItemAdmin(admin.ModelAdmin):
+    list_display = ('office', 'item_name', 'quantity', 'remarks', 'year')  # Add item_name method
+    
+    def item_name(self, obj):
+        return obj.item_id.name  # Access 'name' through the ForeignKey 'item_id'
+    item_name.admin_order_field = 'item_id__name'  # Allows sorting by 'item_id__name'
+    item_name.short_description = 'Item Name'  # Custom column header in admin
+    
+    search_fields = ('item_id__name', 'office__name')
+    list_filter = ('year', 'office')
+    
 admin.site.register(InventoryItem, InventoryItemAdmin)

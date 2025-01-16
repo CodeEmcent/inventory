@@ -12,7 +12,7 @@ class IsAdminOrStaffOrReadOnly(BasePermission):
             return True
 
         # Allow only authenticated users with 'admin' or 'staff' role to perform other requests.
-        return request.user.is_authenticated and request.user.role in ('admin', 'staff')
+        return request.user.is_authenticated and request.user.role in ('admin', 'staff', 'superuser')
 
 
 class IsSuperAdmin(BasePermission):
@@ -30,7 +30,9 @@ class IsOwnerOrAdminOrStaff(BasePermission):
     def has_object_permission(self, request, view, obj):
         # Read permissions are allowed for any request
         if request.method in ('GET', 'HEAD', 'OPTIONS'):
-            return True
+            return (
+                request.user.role in ('admin', 'staff') or obj.user == request.user
+            )
 
         # Write permissions are only allowed to the owner, admins, or staff
         return (
@@ -38,14 +40,15 @@ class IsOwnerOrAdminOrStaff(BasePermission):
             request.user.role in ('admin', 'staff')
         )
 
-
 class IsAdminOrSuperAdmin(BasePermission):
     """
-    Custom permission to allow only admin or super_admin users.
+    Custom permission to allow only admin, super_admin users, or superusers.
     """
     def has_permission(self, request, view):
-        return request.user.is_authenticated and request.user.role in ('admin', 'super_admin')
-
+        return request.user.is_authenticated and (
+            request.user.is_superuser or
+            request.user.role in ('admin', 'super_admin')
+        )
 
 class IsAssignedStaff(BasePermission):
     """

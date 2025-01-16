@@ -1,5 +1,7 @@
+import uuid
 from django.db import models
 from accounts.models import CustomUser
+from datetime import date
 
 class Office(models.Model):
     """
@@ -11,7 +13,49 @@ class Office(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.department})" if self.department else self.name
+    
 
+class ItemRegistry(models.Model):
+    """
+    Represents a centralized registry of items with unique stock IDs.
+    """
+    name = models.CharField(
+        max_length=255,
+        unique=True,
+        help_text="The name of the inventory item."
+    )
+    stock_id = models.CharField(
+        max_length=50,
+        unique=True,
+        editable=False,
+        help_text="Automatically generated unique identifier for the item."
+    )
+    description = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        help_text="Optional description of the item."
+    )
+    unit_cost = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0.0,
+        help_text="The cost per unit of the item."
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def save(self, *args, **kwargs):
+        """
+        Automatically generate a stock ID if it doesn't exist.
+        """
+        if not self.stock_id:
+            # Generate a UUID and format it as a short string
+            self.stock_id = f"OLASS-{uuid.uuid4().hex[:8].upper()}"
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"({self.stock_id})"
 
 class InventoryItem(models.Model):
     """
@@ -29,32 +73,39 @@ class InventoryItem(models.Model):
         related_name="inventory_items",
         help_text="The office this inventory item is assigned to."
     )
-    name = models.CharField(
-        max_length=255,
-        help_text="The name of the inventory item."
+    item_id = models.ForeignKey(
+        ItemRegistry,
+        on_delete=models.PROTECT,
+        related_name="inventory_items",
+        help_text="The standardized item from the registry."
     )
     quantity = models.PositiveIntegerField(
         default=0,
         help_text="The quantity of this inventory item (must be 1 or greater)."
     )
-    description = models.CharField(
-        max_length=100,
-        null=True,
-        blank=True,
-        help_text="Optional description of the inventory item (max 100 characters)."
-    )
     remarks = models.CharField(
         max_length=100,
-        null=True,
+        default="Perfect",
+        null=False,
         blank=False,
         help_text="Remarks on the item's condition (max 100 characters)."
+    )
+    description = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        help_text="The description of the inventory item, pre-filled from ItemRegistry."
+    )
+    year = models.PositiveIntegerField(
+        default=date.today().year,
+        help_text="Year of the inventory"
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        unique_together = ('user', 'office', 'name')  # Prevent duplicate items for user-office combinations
-        ordering = ['name']  # Default alphabetical order by name
+        unique_together = ('user', 'office', 'item_id', 'year')  # Correct reference to 'item_id'
+        ordering = ['item_id__name']  # Correct lookup for 'name' field in ItemRegistry
         constraints = [
             models.CheckConstraint(
                 check=models.Q(quantity__gte=1),  # Ensure quantity is at least 1
@@ -63,10 +114,12 @@ class InventoryItem(models.Model):
         ]
 
     def __str__(self):
-        return f"{self.name} (Office: {self.office.name}, User: {self.user.username})"
+        return f"{self.item_id.stock_id} - {self.item_id.name} (Office: {self.office.name}, User: {self.user.username})"
 
     def save(self, *args, **kwargs):
-        if self.quantity < 1:
-            raise ValueError("Quantity must be at least 1.")
-        self.name = self.name.title()  # Capitalize the name
-        super().save(*args, **kwargs)
+        # Set the description to the item's description from the ItemRegistry
+        if not self.description and self.item_id:
+            self.description = self.item_id.description
+        super().save(*args, **kwargs)  # Call the original save method
+
+
