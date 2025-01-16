@@ -2,23 +2,71 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework import status
 from .serializers import (
     RegisterUserSerializer, 
     OfficeAssignmentSerializer,
-    UserListSerializer
+    UserListSerializer,
+    ProfileSerializer, 
 )
 from accounts.permissions import IsAdminOrSuperAdmin
-from accounts.models import CustomUser
+from accounts.models import CustomUser, Profile
+
 
 class RegisterUserView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
+        # Accepting profile data as well in the serializer
         serializer = RegisterUserSerializer(data=request.data)
         if serializer.is_valid():
-            serializer.save()
+            # Save the user
+            user = serializer.save()
+
+            # Create profile for the user directly in the serializer (optional)
+            profile_data = {
+                'user': user,
+                'organization': request.data.get('organization', ''),
+                'bio': request.data.get('bio', ''),
+                'profile_picture': request.data.get('profile_picture', None)
+            }
+            # Ensure that profile creation is tied to user registration
+            profile, created = Profile.objects.get_or_create(user=user, defaults=profile_data)
+
             return Response({"message": "User registered successfully."}, status=201)
         return Response(serializer.errors, status=400)
+
+
+class UserProfileView(APIView):
+    """
+    Get or update the current user's profile.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        try:
+            profile = user.profile  # Since we have a one-to-one relationship
+        except Profile.DoesNotExist:
+            return Response({"error": "Profile not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        # Serialize the profile data
+        serializer = ProfileSerializer(profile)
+        return Response({"message": "User profile fetched successfully.", "data": serializer.data}, status=status.HTTP_200_OK)
+
+    def put(self, request):
+        user = request.user
+        try:
+            profile = user.profile  # Fetch user's profile
+        except Profile.DoesNotExist:
+            return Response({"error": "Profile not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        # Deserialize the profile data to update
+        serializer = ProfileSerializer(profile, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response({"message": "Profile updated successfully.", "data": serializer.data}, status=status.HTTP_200_OK)
+        return Response({"error": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
 
 
 class LogoutView(APIView):
