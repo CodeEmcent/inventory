@@ -26,7 +26,6 @@ from accounts.permissions import (
 )
 
 # --- Office ViewSet ---
-# --- Office ViewSet ---
 class OfficeViewSet(ModelViewSet):
     queryset = Office.objects.all()
     serializer_class = OfficeSerializer
@@ -354,7 +353,6 @@ class InventoryViewSet(ModelViewSet):
         return Response({"message": f"Item '{instance.item.name}' successfully deleted."}, status=200)
 
 # --- Template View ---
-# --- Template View ---
 class TemplateView(APIView):
     permission_classes = [IsAuthenticated, IsAssignedStaff]
     
@@ -424,12 +422,11 @@ class TemplateView(APIView):
         return response
 
 # --- Import Inventory View ---
-# Updated ImportInventoryView with description handling
 class ImportInventoryView(APIView):
     """
     Endpoint to import inventory data from an Excel file.
     """
-    permission_classes = [IsAuthenticated, ]
+    permission_classes = [IsAuthenticated]
 
     def post(self, request):
         file_obj = request.FILES.get('file', None)
@@ -641,189 +638,6 @@ class ExportInventoryView(APIView):
         workbook.save(response)
         return response
 
-# --- Broadsheet View ---
-# class BroadsheetView(APIView):
-#     """
-#     API to generate a detailed broadsheet report with proper department and office mapping, including stock_id.
-#     """
-#     permission_classes = [IsAuthenticated, IsAdminOrSuperAdmin]
-
-#     def get(self, request, *args, **kwargs):
-#         year = request.GET.get('year', None)
-#         if not year:
-#             return Response({"error": "Year parameter is required."}, status=400)
-
-#         # Aggregate inventory data and department-office mapping
-#         inventory_data = self.aggregate_inventory_data(year)
-#         department_offices = self.get_department_offices(year)
-
-#         # Generate Excel file
-#         return self.generate_excel(inventory_data, department_offices, year)
-
-#     def aggregate_inventory_data(self, year):
-#         """
-#         Fetch and group inventory data by unique items across offices, including stock_id and descriptions.
-#         """
-#         return (
-#             InventoryItem.objects.filter(year=year)
-#             .values(
-#                 'item_id__stock_id',  # Stock ID from ItemRegistry
-#                 'item_id__name',      # Item name from ItemRegistry
-#                 'office__name',       # Office name
-#                 'office__department', # Department
-#                 'item_id__description',  # Item description
-#                 'item_id__unit_cost'  # Unit cost from ItemRegistry
-#             )
-#             .annotate(total_quantity=Sum('quantity'))
-#             .distinct()
-#             .order_by('item_id__name')  # Order items alphabetically by name
-#         )
-
-#     def get_department_offices(self, year):
-#         """
-#         Fetch all unique departments and their associated offices without duplicates.
-#         """
-#         departments = (
-#             InventoryItem.objects.filter(year=year)
-#             .values_list('office__department', flat=True)
-#             .distinct()
-#         )
-#         department_offices = {}
-#         for dept in departments:
-#             offices = (
-#                 InventoryItem.objects.filter(office__department=dept, year=year)
-#                 .values_list('office__name', flat=True)
-#                 .distinct()
-#             )
-#             department_offices[dept] = sorted(set(offices))  # Ensure unique and sorted
-#         return department_offices
-
-#     def generate_excel(self, inventory_data, department_offices, year):
-#         """
-#         Generate and return the broadsheet as an Excel file.
-#         """
-#         workbook = Workbook()
-#         sheet = workbook.active
-#         sheet.title = "Broadsheet"
-
-#         # Organization and subheading
-#         organization_name = "Your Organization Name"
-#         num_office_columns = sum(len(offices) for offices in department_offices.values())
-#         num_columns = 7 + num_office_columns  # Updated for the number of office columns
-
-#         # Header: Organization Name
-#         sheet.merge_cells(start_row=1, start_column=1, end_row=1, end_column=num_columns)
-#         sheet.cell(row=1, column=1, value=organization_name.upper()).font = Font(size=21, bold=True)
-#         sheet.cell(row=1, column=1).alignment = Alignment(horizontal="center")
-
-#         # Subheading: Year
-#         sheet.merge_cells(start_row=2, start_column=1, end_row=2, end_column=num_columns)
-#         sheet.cell(row=2, column=1, value=f"Inventory Data for the Year {year}").font = Font(size=17, italic=True)
-#         sheet.cell(row=2, column=1).alignment = Alignment(horizontal="center")
-
-#         # Headers
-#         sheet.append(["S/N", "Stock ID", "Item Name", "Description"] + [f"{office} Qty" for offices in department_offices.values() for office in offices] + ["TOTAL", "TOTAL VALUE", "UNIT"])
-#         header_row = sheet.max_row
-
-#         # Merge headers
-#         for col in range(1, 5):
-#             sheet.merge_cells(start_row=header_row, start_column=col, end_row=header_row + 1, end_column=col)
-#             sheet.cell(row=header_row, column=col).alignment = Alignment(horizontal="center", vertical="center")
-
-#         # Add department and office headers
-#         col_index = 5
-#         for department, offices in department_offices.items():
-#             start_col = col_index
-#             for office in offices:
-#                 sheet.cell(row=header_row + 1, column=col_index, value=office)
-#                 sheet.cell(row=header_row + 1, column=col_index).alignment = Alignment(textRotation=90, horizontal="center")
-#                 col_index += 1
-#             sheet.merge_cells(
-#                 start_row=header_row, start_column=start_col, end_row=header_row, end_column=col_index - 1
-#             )
-#             sheet.cell(row=header_row, column=start_col).value = department
-#             sheet.cell(row=header_row, column=start_col).alignment = Alignment(horizontal="center", vertical="center")
-
-#         # Add TOTAL, TOTAL VALUE, and UNIT labels
-#         total_cell = sheet.cell(row=header_row, column=col_index, value="TOTAL")
-#         total_cell.font = Font(name="Times New Roman", size=12, bold=True)
-#         total_cell.alignment = Alignment(textRotation=90, horizontal="center")
-#         sheet.merge_cells(start_row=header_row, start_column=col_index, end_row=header_row + 1, end_column=col_index)
-
-#         total_value_cell = sheet.cell(row=header_row, column=col_index + 1, value="TOTAL VALUE")
-#         total_value_cell.font = Font(name="Times New Roman", size=12, bold=True)
-#         total_value_cell.alignment = Alignment(textRotation=90, horizontal="center")
-#         sheet.merge_cells(start_row=header_row, start_column=col_index + 1, end_row=header_row + 1, end_column=col_index + 1)
-
-#         unit_cell = sheet.cell(row=header_row, column=col_index + 2, value="UNIT")
-#         unit_cell.font = Font(name="Times New Roman", size=12, bold=True)
-#         unit_cell.alignment = Alignment(textRotation=90, horizontal="center")
-#         sheet.merge_cells(start_row=header_row, start_column=col_index + 2, end_row=header_row + 1, end_column=col_index + 2)
-
-#         # Write data rows
-#         unique_items = inventory_data.values(
-#             'item_id__stock_id', 'item_id__name', 'item_id__description', 'item_id__unit_cost'
-#         ).distinct()
-#         row_index = sheet.max_row + 1
-#         serial_number = 1
-#         for item in unique_items:
-#             stock_id = item['item_id__stock_id']
-#             item_name = item['item_id__name']
-#             description = item['item_id__description']
-#             unit_cost = item['item_id__unit_cost'] or 0
-
-#             # Write S/N column
-#             sheet.cell(row=row_index, column=1, value=serial_number).alignment = Alignment(horizontal="center")
-
-#             # Write Stock ID, Item Name, Description, and Unit Cost
-#             sheet.cell(row=row_index, column=2, value=stock_id)
-#             sheet.cell(row=row_index, column=3, value=item_name)
-#             sheet.cell(row=row_index, column=4, value=description or "N/A")
-#             unit_cost_cell = sheet.cell(row=row_index, column=col_index + 2, value=unit_cost)
-#             unit_cost_cell.alignment = Alignment(horizontal="center")
-
-#             # Map quantities for each office
-#             total_quantity = 0
-#             col_index_qty = 5  # Column for office quantities
-#             for department, offices in department_offices.items():
-#                 for office in offices:
-#                     quantity = next(
-#                         (
-#                             row['total_quantity']
-#                             for row in inventory_data
-#                             if row['item_id__stock_id'] == stock_id and row['office__name'] == office
-#                         ),
-#                         None,  # Use None for missing data
-#                     )
-#                     sheet.cell(row=row_index, column=col_index_qty, value=quantity or 0)
-#                     sheet.cell(row=row_index, column=col_index_qty).alignment = Alignment(horizontal="center")
-#                     total_quantity += quantity or 0
-#                     col_index_qty += 1
-
-#             # Write Total column
-#             total_cell = sheet.cell(row=row_index, column=col_index_qty, value=total_quantity)
-#             total_cell.alignment = Alignment(horizontal="center")
-
-#             # Write Total Value column
-#             total_value = total_quantity * unit_cost
-#             total_value_cell = sheet.cell(row=row_index, column=col_index_qty + 1, value=total_value)
-#             total_value_cell.alignment = Alignment(horizontal="center")
-
-#             row_index += 1
-#             serial_number += 1
-
-#         # Adjust column widths
-#         for col in range(1, num_columns + 1):
-#             sheet.column_dimensions[get_column_letter(col)].width = 20
-
-#         # Prepare the response
-#         response = HttpResponse(
-#             content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-#         )
-#         response['Content-Disposition'] = f'attachment; filename=broadsheet_{year}.xlsx'
-#         workbook.save(response)
-#         return response
-
 
 class BroadsheetView(APIView):
     """
@@ -890,7 +704,11 @@ class BroadsheetView(APIView):
         sheet.title = "Broadsheet"
 
         # Organization and subheading
-        organization_name = "Your Organization Name"
+        # Fetch the organization name dynamically from user profile or directly from user
+        organization_name = getattr(self.request.user.profile, 'organization_name', None) if hasattr(self.request.user, 'profile') else None
+        if not organization_name:
+            organization = self.request.user.organization if hasattr(self.request.user, 'organization') else None
+            organization_name = organization.name if organization else "Unknown Organization"
         num_office_columns = sum(len(offices) for offices in department_offices.values())
         num_columns = 7 + num_office_columns  # Updated for two new columns
 

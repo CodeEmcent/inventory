@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.views import TokenObtainPairView
+from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.exceptions import AuthenticationFailed
 from django.contrib.auth import get_user_model
 from accounts.models import CustomUser, Profile, Organization
@@ -8,7 +9,16 @@ from core.models import Office
 
 User = get_user_model()
 
+# In your backend account serializer, modify CustomTokenObtainPairSerializer
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
+    @classmethod
+    def get_token(cls, user):
+        token = super().get_token(user)
+
+        # Add custom claims
+        token['role'] = user.role  # Assuming the User model has a `role` field
+        return token
+
     def validate(self, attrs):
         username_or_email = attrs.get("username")
         password = attrs.get("password")
@@ -25,7 +35,15 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
 
         # Set the username for further validation
         attrs["username"] = user.username
-        return super().validate(attrs)
+
+        # Call the base validate method
+        validated_data = super().validate(attrs)
+
+        # Add the role to the validated data (this will be included in the JWT response)
+        validated_data['role'] = user.role
+
+        return validated_data
+
 
 class CustomTokenObtainPairView(TokenObtainPairView):
     serializer_class = CustomTokenObtainPairSerializer

@@ -14,7 +14,6 @@ class ItemRegistrySerializer(serializers.ModelSerializer):
         fields = ['id', 'stock_id', 'name', 'description', 'created_at', 'updated_at']
         read_only_fields = ['id', 'created_at', 'updated_at']
 
-
 class InventoryItemSerializer(serializers.ModelSerializer):
     # Use 'item_id' to reference the related 'ItemRegistry' model
     item_name = serializers.CharField(source='item_id.name', read_only=True)  # Fetch the 'name' field from ItemRegistry

@@ -8,10 +8,16 @@ from .serializers import (
     OfficeAssignmentSerializer,
     UserListSerializer,
     ProfileSerializer, 
+    CustomTokenObtainPairSerializer  # Import the custom JWT serializer
 )
 from accounts.permissions import IsAdminOrSuperAdmin
-from accounts.models import CustomUser, Profile
+from accounts.models import CustomUser, Profile, Organization
+from core.models import Office
+from rest_framework_simplejwt.views import TokenObtainPairView
 
+
+class CustomTokenObtainPairView(TokenObtainPairView):
+    serializer_class = CustomTokenObtainPairSerializer
 
 class RegisterUserView(APIView):
     permission_classes = [AllowAny]
@@ -23,17 +29,23 @@ class RegisterUserView(APIView):
             # Save the user
             user = serializer.save()
 
-            # Create profile for the user directly in the serializer (optional)
+            # Handle organization association
+            organization_name = request.data.get('organization', '').strip()
+            organization = None
+            if organization_name:
+                organization, _ = Organization.objects.get_or_create(name=organization_name)
+
+            # Create or update the profile
             profile_data = {
-                'user': user,
-                'organization': request.data.get('organization', ''),
-                'bio': request.data.get('bio', ''),
+                'organization': organization,
+                'bio': request.data.get('bio', '').strip(),
                 'profile_picture': request.data.get('profile_picture', None)
             }
-            # Ensure that profile creation is tied to user registration
-            profile, created = Profile.objects.get_or_create(user=user, defaults=profile_data)
+            Profile.objects.update_or_create(user=user, defaults=profile_data)
 
             return Response({"message": "User registered successfully."}, status=201)
+        
+        # Handle validation errors
         return Response(serializer.errors, status=400)
 
 
@@ -81,27 +93,23 @@ class LogoutView(APIView):
         except Exception as e:
             return Response({"error": str(e)}, status=400)
 
-
 class AllUsersView(APIView):
-    """
-    Endpoint to list all users (staff, admin, super admin).
-    Restricted to admins and super admins.
-    """
-    permission_classes = [IsAuthenticated, IsAdminOrSuperAdmin]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        # Admins and Superadmins can see all users (staff, admin, super_admin)
-        if request.user.role in ['admin', 'super_admin']:
-            users = CustomUser.objects.all()  # Fetch all users
-        else:
-            users = CustomUser.objects.filter(role='staff')  # Only fetch staff users for non-admins
+        users = CustomUser.objects.all()  # Fetch all users
+        organizations = Organization.objects.all()  # Fetch all organizations
+        offices = Office.objects.all()  # Fetch all offices
 
-        serializer = UserListSerializer(users, many=True)
+        # Serialize users
+        users_data = UserListSerializer(users, many=True).data
+
+        # Include organizations and offices in the response
         return Response({
-            "message": "All staff users retrieved successfully.",
-            "data": serializer.data
-        }, status=200)
-
+            "users": users_data,
+            "organizations": [{"id": org.id, "name": org.name} for org in organizations],
+            "offices": [{"id": office.id, "name": office.name} for office in offices],
+        })
 
 class AssignOfficesView(APIView):
     """
