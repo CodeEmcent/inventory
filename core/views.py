@@ -638,7 +638,6 @@ class ExportInventoryView(APIView):
         workbook.save(response)
         return response
 
-
 class BroadsheetView(APIView):
     """
     API to generate a detailed broadsheet report with proper department and office mapping, including stock_id.

@@ -15,13 +15,13 @@ class ItemRegistrySerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'created_at', 'updated_at']
 
 class InventoryItemSerializer(serializers.ModelSerializer):
-    # Use 'item_id' to reference the related 'ItemRegistry' model
-    item_name = serializers.CharField(source='item_id.name', read_only=True)  # Fetch the 'name' field from ItemRegistry
+    item_name = serializers.CharField(source='item_id.name', read_only=True)  # Fetch item name
+    office_name = serializers.CharField(source='office.name', read_only=True)  # Fetch office name
 
     class Meta:
         model = InventoryItem
         fields = [
-            'id', 'user', 'office', 'item_id', 'item_name', 'quantity',
+            'id', 'user', 'office', 'office_name', 'item_id', 'item_name', 'quantity',
             'remarks', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at', 'user', 'office']
