@@ -10,7 +10,7 @@ class ProfileInline(admin.StackedInline):  # Use TabularInline for a table-like 
 
 class CustomUserAdmin(UserAdmin):
     # List the fields to display in the user list page of the admin
-    list_display = ('username', 'email', 'role', 'organization', 'get_assigned_offices')
+    list_display = ('username', 'first_name', 'last_name', 'email', 'role', 'organization', 'get_assigned_offices')
 
     # Add the `organization` field to the user edit form in the admin
     fieldsets = UserAdmin.fieldsets + (

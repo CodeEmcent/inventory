@@ -120,3 +120,4 @@ class InventoryItem(models.Model):
         if not self.description and self.item_id:
             self.description = self.item_id.description
         super().save(*args, **kwargs)  # Call the original save method
+
