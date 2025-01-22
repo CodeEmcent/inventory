@@ -3,6 +3,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.exceptions import ValidationError, PermissionDenied
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.exceptions import NotFound
 from rest_framework.views import APIView
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font
@@ -16,8 +17,8 @@ from openpyxl import load_workbook
 from django.shortcuts import get_object_or_404
 from django.db.models import Sum, Avg, Count
 from datetime import date
-from .models import Office, ItemRegistry, InventoryItem
-from .serializers import OfficeSerializer, ItemRegistrySerializer, InventoryItemSerializer
+from .models import Office, ItemRegister, InventoryItem
+from .serializers import OfficeSerializer, ItemRegisterSerializer, InventoryItemSerializer
 from accounts.permissions import (
     IsAdminOrStaffOrReadOnly,
     IsAdminOrSuperAdmin,
@@ -46,17 +47,46 @@ class OfficeViewSet(ModelViewSet):
         super().destroy(request, *args, **kwargs)
         return Response({"message": f"Office '{office.name}' deleted successfully."}, status=200)
 
-class ItemRegistryViewSet(ModelViewSet):
+class ItemRegisterViewSet(ModelViewSet):
     """
-    Handles CRUD operations for the Item Registry.
+    Handles CRUD operations for the Item Register.
     """
-    queryset = ItemRegistry.objects.all()
-    serializer_class = ItemRegistrySerializer
+    queryset = ItemRegister.objects.all()
+    serializer_class = ItemRegisterSerializer
     permission_classes = [IsAuthenticated, IsAdminOrSuperAdmin]
+    lookup_field = 'item_id'  # Use 'item_id' for lookups instead of the default 'id'
+
+    def get_object(self):
+        """
+        Override the get_object method to look up by item_id instead of id.
+        """
+        item_id = self.kwargs.get('item_id')
+        try:
+            return ItemRegister.objects.get(item_id=item_id)
+        except ItemRegister.DoesNotExist:
+            raise NotFound(detail="Item not found")
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.get_queryset()
+        page = self.paginate_queryset(queryset)  # Use DRF pagination if needed
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+
+        data = [
+            {
+                "id": item.id,
+                "item_id": item.item_id,
+                "name": item.name,
+                "description": item.description or "N/A",
+            }
+            for item in queryset
+        ]
+        return Response({"item_register": data}, status=200)
 
     def create(self, request, *args, **kwargs):
         """
-        Create a new item in the registry and return a success message.
+        Create a new item in the Register and return a success message.
         """
         response = super().create(request, *args, **kwargs)
         response.data["message"] = "Item registered successfully."
@@ -64,7 +94,7 @@ class ItemRegistryViewSet(ModelViewSet):
 
     def update(self, request, *args, **kwargs):
         """
-        Update an item in the registry and return a success message.
+        Update an item in the Register and return a success message.
         """
         response = super().update(request, *args, **kwargs)
         response.data["message"] = "Item updated successfully."
@@ -72,15 +102,15 @@ class ItemRegistryViewSet(ModelViewSet):
 
     def destroy(self, request, *args, **kwargs):
         """
-        Delete an item from the registry and return a success message.
+        Delete an item from the Register and return a success message.
         """
         item = self.get_object()
         super().destroy(request, *args, **kwargs)
         return Response({"message": f"Item '{item.name}' deleted successfully."}, status=200)
 
-class RegistryTemplateView(APIView):
+class RegisterTemplateView(APIView):
     """
-    Endpoint to download an Excel template for item registry import.
+    Endpoint to download an Excel template for item Register import.
     """
     permission_classes = [IsAuthenticated, IsAdminOrSuperAdmin]
 
@@ -88,7 +118,7 @@ class RegistryTemplateView(APIView):
         # Create a workbook and sheet
         workbook = Workbook()
         sheet = workbook.active
-        sheet.title = "Item Registry Template"
+        sheet.title = "Item Register Template"
 
         # Add organization name and header
         organization_name = request.user.organization.name if request.user.organization else "Unknown Organization"
@@ -106,7 +136,7 @@ class RegistryTemplateView(APIView):
         # Subheading: Year
         sheet.merge_cells(start_row=2, start_column=1, end_row=2, end_column=3)
         year_cell = sheet.cell(row=2, column=1)
-        year_cell.value = f"Item Registry Template - Year {current_year}"
+        year_cell.value = f"Item Register Template - Year {current_year}"
         year_cell.font = Font(bold=True, italic=True, size=12)
         year_cell.alignment = centered_alignment
 
@@ -122,13 +152,13 @@ class RegistryTemplateView(APIView):
         response = HttpResponse(
             content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
-        response['Content-Disposition'] = 'attachment; filename=item_registry_template.xlsx'
+        response['Content-Disposition'] = 'attachment; filename=item_Register_template.xlsx'
         workbook.save(response)
         return response
 
-class RegistryImportView(APIView):
+class RegisterImportView(APIView):
     """
-    Endpoint to upload an Excel template and register items in the registry.
+    Endpoint to upload an Excel template and register items in the Register.
     """
     permission_classes = [IsAuthenticated, IsAdminOrSuperAdmin]
 
@@ -165,7 +195,7 @@ class RegistryImportView(APIView):
 
             # Create or update item
             try:
-                item, created = ItemRegistry.objects.get_or_create(
+                item, created = ItemRegister.objects.get_or_create(
                     name=name.strip(),
                     defaults={"description": description.strip() if description else None},
                 )
@@ -191,9 +221,9 @@ class RegistryImportView(APIView):
 
         return Response(response_data, status=201 if not errors else 400)
 
-class RegistryDownloadView(APIView):
+class RegisterDownloadView(APIView):
     """
-    Endpoint to download the item registry as an Excel file.
+    Endpoint to download the item Register as an Excel file.
     """
     permission_classes = [IsAuthenticated]
 
@@ -201,7 +231,7 @@ class RegistryDownloadView(APIView):
         # Create a workbook and sheet
         workbook = Workbook()
         sheet = workbook.active
-        sheet.title = "Item Registry"
+        sheet.title = "Item Register"
 
         # Add organization name and header
         organization_name = request.user.organization.name if request.user.organization else "Unknown Organization"
@@ -219,24 +249,24 @@ class RegistryDownloadView(APIView):
         # Subheading: Year
         sheet.merge_cells(start_row=2, start_column=1, end_row=2, end_column=4)
         year_cell = sheet.cell(row=2, column=1)
-        year_cell.value = f"Item Registry - Year {current_year}"
+        year_cell.value = f"Item Register - Year {current_year}"
         year_cell.font = Font(bold=True, italic=True, size=12)
         year_cell.alignment = centered_alignment
 
         # Column headers
-        headers = ["S/N", "Stock ID", "Name", "Description"]
+        headers = ["S/N", "Item ID", "Name", "Description"]
         for col_num, header in enumerate(headers, start=1):
             cell = sheet.cell(row=3, column=col_num)
             cell.value = header
             cell.font = Font(bold=True)
             cell.alignment = Alignment(horizontal="center")
 
-        # Fetch item registry data and populate the sheet
-        item_registry = ItemRegistry.objects.all()
-        for idx, item in enumerate(item_registry, start=1):
+        # Fetch item Register data and populate the sheet
+        item_Register = ItemRegister.objects.all()
+        for idx, item in enumerate(item_Register, start=1):
             sheet.append([
                 idx,  # S/N
-                item.stock_id,  # Stock ID
+                item.item_id,  # item ID
                 item.name,  # Name
                 item.description or "N/A"  # Description
             ])
@@ -245,27 +275,9 @@ class RegistryDownloadView(APIView):
         response = HttpResponse(
             content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
-        response['Content-Disposition'] = 'attachment; filename=item_registry.xlsx'
+        response['Content-Disposition'] = 'attachment; filename=item_Register.xlsx'
         workbook.save(response)
         return response
-
-class RegistryView(APIView):
-    """
-    Endpoint to retrieve the item registry as JSON data.
-    """
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-        item_registry = ItemRegistry.objects.all()
-        data = [
-            {
-                "stock_id": item.stock_id,
-                "name": item.name,
-                "description": item.description or "N/A",
-            }
-            for item in item_registry
-        ]
-        return Response({"item_registry": data}, status=200)
 
 # --- Inventory ViewSet ---
 class InventoryViewSet(ModelViewSet):
@@ -317,15 +329,15 @@ class InventoryViewSet(ModelViewSet):
         if not office:
             raise ValidationError("User is not assigned to any office.")
         
-        # Get item_id (primary key of the ItemRegistry)
-        item_id = self.request.data.get('item_id')  # Ensure item_id is passed as the PK (not stock_id)
+        # Get item_id (primary key of the ItemRegister)
+        item_id = self.request.data.get('item_id')  # Ensure item_id is passed as the PK (not item_id)
         
         # Validate that item_id is a valid primary key
         if not item_id:
             raise ValidationError("Item ID is required.")
         
-        # Fetch the ItemRegistry instance by its primary key (item_id)
-        item = get_object_or_404(ItemRegistry, id=item_id)
+        # Fetch the ItemRegister instance by its primary key (item_id)
+        item = get_object_or_404(ItemRegister, id=item_id)
 
         # Check if the office is valid for the user
         if office not in user.assigned_offices.all():
@@ -363,8 +375,8 @@ class TemplateView(APIView):
         if request.user.role not in ('admin', 'super_admin') and office not in request.user.assigned_offices.all():
             return Response({"error": "You do not have permission to download this template."}, status=403)
 
-        # Fetch all items from the ItemRegistry
-        items = ItemRegistry.objects.all()
+        # Fetch all items from the ItemRegister
+        items = ItemRegister.objects.all()
 
         # Create workbook and sheet
         workbook = Workbook()
@@ -390,21 +402,21 @@ class TemplateView(APIView):
         sheet.cell(row=2, column=1).alignment = centered_alignment
 
         # Column Headers
-        headers = ["S/N", "Stock ID", "Items", "Qty", "Description (Optional)", "Remarks"]
+        headers = ["S/N", "Item ID", "Items", "Qty", "Description (Optional)", "Remarks"]
         for col_num, header in enumerate(headers, start=1):
             cell = sheet.cell(row=3, column=col_num)
             cell.value = header
             cell.font = Font(bold=True)
             cell.alignment = Alignment(horizontal="center", vertical="center")
 
-        # Populate rows with items from ItemRegistry, including the description
+        # Populate rows with items from ItemRegister, including the description
         for idx, item in enumerate(items, start=1):
-            sheet.append([idx, item.stock_id, item.name, "", item.description, ""])
+            sheet.append([idx, item.item_id, item.name, "", item.description, ""])
 
         # Footer for Staff Name
         staff_name = request.user.username
         sheet.append([])  # Leave a blank row
-        sheet.append([f"Signature: {staff_name}", "Ensure stock ID matches the uploaded template."])
+        sheet.append([f"Signature: {staff_name}", "Ensure item ID matches the uploaded template."])
         sheet.merge_cells(start_row=sheet.max_row, start_column=1, end_row=sheet.max_row, end_column=6)
         sheet.cell(row=sheet.max_row, column=1).alignment = centered_alignment
 
@@ -456,7 +468,7 @@ class ImportInventoryView(APIView):
         sheet = workbook.active
 
         # Validate headers
-        expected_headers = ["S/N", "Stock ID", "Items", "Qty", "Description (Optional)", "Remarks"]
+        expected_headers = ["S/N", "Item ID", "Items", "Qty", "Description (Optional)", "Remarks"]
         actual_headers = [str(cell.value).strip() for cell in sheet[3]]  # Normalize headers
         if actual_headers != expected_headers:
             return Response({
@@ -469,20 +481,20 @@ class ImportInventoryView(APIView):
         imported_items = []
         updated_items = []
         for i, row in enumerate(sheet.iter_rows(min_row=4, max_row=sheet.max_row, values_only=True)):
-            serial_number, stock_id, item_name, quantity, description, remarks = row
+            serial_number, item_id, item_name, quantity, description, remarks = row
 
-            # Skip rows where stock_id is empty (such as empty or signature rows)
-            if not stock_id:
+            # Skip rows where item_id is empty (such as empty or signature rows)
+            if not item_id:
                 continue
 
-            # Validate stock ID
-            item = ItemRegistry.objects.filter(stock_id=stock_id).first()
+            # Validate item ID
+            item = ItemRegister.objects.filter(item_id=item_id).first()
             if not item:
-                return Response({"error": f"Invalid stock ID '{stock_id}' in row {i + 4}."}, status=400)
+                return Response({"error": f"Invalid item ID '{item_id}' in row {i + 4}."}, status=400)
 
-            # Ensure stock ID matches item name
+            # Ensure item ID matches item name
             if item.name != item_name:
-                return Response({"error": f"Item name '{item_name}' does not match stock ID '{stock_id}' in row {i + 4}."}, status=400)
+                return Response({"error": f"Item name '{item_name}' does not match item ID '{item_id}' in row {i + 4}."}, status=400)
 
             # Validate quantity
             if not isinstance(quantity, int) or quantity < 1:
@@ -517,7 +529,7 @@ class ImportInventoryView(APIView):
 # --- Export Inventory View ---
 class ExportInventoryView(APIView):
     """
-    View to export all inventory items to an Excel file with enhanced structure, including stock_id.
+    View to export all inventory items to an Excel file with enhanced structure, including item_id.
     """
     permission_classes = [IsAuthenticated]
 
@@ -593,8 +605,8 @@ class ExportInventoryView(APIView):
         sheet.cell(row=2, column=1).font = header_font
         sheet.cell(row=2, column=1).alignment = centered_alignment
 
-        # Add column headers, including Stock ID
-        headers = ["S/N", "Stock ID", "Item Name", "Quantity", "Description", "Remarks", "Created At", "Updated At"]
+        # Add column headers, including item ID
+        headers = ["S/N", "Item ID", "Item Name", "Quantity", "Description", "Remarks", "Created At", "Updated At"]
         sheet.append(headers)
 
         # Style the column headers
@@ -609,8 +621,8 @@ class ExportInventoryView(APIView):
         for idx, item in enumerate(inventory_items, start=1):
             sheet.append([
                 idx,
-                item.item_id.stock_id,  # Stock ID from the linked ItemRegistry
-                item.item_id.name,      # Name from the linked ItemRegistry
+                item.item_id.item_id,  # item ID from the linked ItemRegister
+                item.item_id.name,      # Name from the linked ItemRegister
                 item.quantity,
                 item.description or "N/A",  # Include description in the row
                 item.remarks or "N/A",
@@ -640,7 +652,7 @@ class ExportInventoryView(APIView):
 
 class BroadsheetView(APIView):
     """
-    API to generate a detailed broadsheet report with proper department and office mapping, including stock_id.
+    API to generate a detailed broadsheet report with proper department and office mapping, including item_id.
     """
     permission_classes = [IsAuthenticated, IsAdminOrSuperAdmin]
 
@@ -658,17 +670,17 @@ class BroadsheetView(APIView):
 
     def aggregate_inventory_data(self, year):
         """
-        Fetch and group inventory data by unique items across offices, including stock_id and descriptions.
+        Fetch and group inventory data by unique items across offices, including item_id and descriptions.
         """
         return (
             InventoryItem.objects.filter(year=year)
             .values(
-                'item_id__stock_id',  # Stock ID from ItemRegistry
-                'item_id__name',      # Item name from ItemRegistry
+                'item_id__item_id',  # item ID from ItemRegister
+                'item_id__name',      # Item name from ItemRegister
                 'office__name',       # Office name
                 'office__department', # Department
                 'item_id__description',  # Item description
-                'item_id__unit_cost'  # Unit cost from ItemRegistry
+                'item_id__unit_cost'  # Unit cost from ItemRegister
             )
             .annotate(total_quantity=Sum('quantity'))
             .distinct()
@@ -722,7 +734,7 @@ class BroadsheetView(APIView):
         sheet.cell(row=2, column=1).alignment = Alignment(horizontal="center")
 
         # Headers
-        sheet.append(["S/N", "Stock ID", "Item Name", "Description", "TOTAL"] + [f"{office}" for offices in department_offices.values() for office in offices] + ["UNIT", "TOTAL VALUE"])
+        sheet.append(["S/N", "Item ID", "Item Name", "Description", "TOTAL"] + [f"{office}" for offices in department_offices.values() for office in offices] + ["UNIT", "TOTAL VALUE"])
         header_row = sheet.max_row
 
         # Merge cells for the label rows
@@ -762,12 +774,12 @@ class BroadsheetView(APIView):
 
         # Write data rows
         unique_items = inventory_data.values(
-            'item_id__stock_id', 'item_id__name', 'item_id__description', 'item_id__unit_cost'
+            'item_id__item_id', 'item_id__name', 'item_id__description', 'item_id__unit_cost'
         ).distinct()
         row_index = sheet.max_row + 1
         serial_number = 1
         for item in unique_items:
-            stock_id = item['item_id__stock_id']
+            item_id = item['item_id__item_id']
             item_name = item['item_id__name']
             description = item['item_id__description']
             unit_cost = item['item_id__unit_cost'] or 0
@@ -775,8 +787,8 @@ class BroadsheetView(APIView):
             # Write S/N column
             sheet.cell(row=row_index, column=1, value=serial_number).alignment = Alignment(horizontal="center")
 
-            # Write Stock ID, Item Name, Description
-            sheet.cell(row=row_index, column=2, value=stock_id)
+            # Write item ID, Item Name, Description
+            sheet.cell(row=row_index, column=2, value=item_id)
             sheet.cell(row=row_index, column=3, value=item_name)
             sheet.cell(row=row_index, column=4, value=description or "N/A")
 
@@ -789,7 +801,7 @@ class BroadsheetView(APIView):
                         (
                             row['total_quantity']
                             for row in inventory_data
-                            if row['item_id__stock_id'] == stock_id and row['office__name'] == office
+                            if row['item_id__item_id'] == item_id and row['office__name'] == office
                         ),
                         None,  # Use None for missing data
                     )

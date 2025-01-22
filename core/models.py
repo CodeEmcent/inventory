@@ -14,16 +14,16 @@ class Office(models.Model):
     def __str__(self):
         return f"{self.name} ({self.department})" if self.department else self.name
 
-class ItemRegistry(models.Model):
+class ItemRegister(models.Model):
     """
-    Represents a centralized registry of items with unique stock IDs.
+    Represents a centralized Register of items with unique item IDs.
     """
     name = models.CharField(
         max_length=255,
         unique=True,
         help_text="The name of the inventory item."
     )
-    stock_id = models.CharField(
+    item_id = models.CharField(
         max_length=50,
         unique=True,
         editable=False,
@@ -46,15 +46,15 @@ class ItemRegistry(models.Model):
 
     def save(self, *args, **kwargs):
         """
-        Automatically generate a stock ID if it doesn't exist.
+        Automatically generate a item ID if it doesn't exist.
         """
-        if not self.stock_id:
+        if not self.item_id:
             # Generate a UUID and format it as a short string
-            self.stock_id = f"OLASS-{uuid.uuid4().hex[:8].upper()}"
+            self.item_id = f"OLASS-{uuid.uuid4().hex[:8].upper()}"
         super().save(*args, **kwargs)
 
     def __str__(self):
-        return f"({self.stock_id})"
+        return f"({self.item_id})"
 
 class InventoryItem(models.Model):
     """
@@ -73,10 +73,10 @@ class InventoryItem(models.Model):
         help_text="The office this inventory item is assigned to."
     )
     item_id = models.ForeignKey(
-        ItemRegistry,
+        ItemRegister,
         on_delete=models.PROTECT,
         related_name="inventory_items",
-        help_text="The standardized item from the registry."
+        help_text="The standardized item from the Register."
     )
     quantity = models.PositiveIntegerField(
         default=0,
@@ -93,7 +93,7 @@ class InventoryItem(models.Model):
         max_length=255,
         blank=True,
         null=True,
-        help_text="The description of the inventory item, pre-filled from ItemRegistry."
+        help_text="The description of the inventory item, pre-filled from ItemRegister."
     )
     year = models.PositiveIntegerField(
         default=date.today().year,
@@ -104,7 +104,7 @@ class InventoryItem(models.Model):
 
     class Meta:
         unique_together = ('user', 'office', 'item_id', 'year')  # Correct reference to 'item_id'
-        ordering = ['item_id__name']  # Correct lookup for 'name' field in ItemRegistry
+        ordering = ['item_id__name']  # Correct lookup for 'name' field in ItemRegister
         constraints = [
             models.CheckConstraint(
                 check=models.Q(quantity__gte=1),  # Ensure quantity is at least 1
@@ -113,10 +113,10 @@ class InventoryItem(models.Model):
         ]
 
     def __str__(self):
-        return f"{self.item_id.stock_id} - {self.item_id.name} (Office: {self.office.name}, User: {self.user.username})"
+        return f"{self.item_id.item_id} - {self.item_id.name} (Office: {self.office.name}, User: {self.user.username})"
 
     def save(self, *args, **kwargs):
-        # Set the description to the item's description from the ItemRegistry
+        # Set the description to the item's description from the ItemRegister
         if not self.description and self.item_id:
             self.description = self.item_id.description
         super().save(*args, **kwargs)  # Call the original save method
