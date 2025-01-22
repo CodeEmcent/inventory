@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Office, ItemRegistry, InventoryItem
+from .models import Office, ItemRegister, InventoryItem
 
 class OfficeSerializer(serializers.ModelSerializer):
     class Meta:
@@ -7,11 +7,10 @@ class OfficeSerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'department', 'created_at']
         read_only_fields = ['created_at']
 
-
-class ItemRegistrySerializer(serializers.ModelSerializer):
+class ItemRegisterSerializer(serializers.ModelSerializer):
     class Meta:
-        model = ItemRegistry
-        fields = ['id', 'stock_id', 'name', 'description', 'created_at', 'updated_at']
+        model = ItemRegister
+        fields = ['id', 'item_id', 'name', 'description', 'created_at', 'updated_at']
         read_only_fields = ['id', 'created_at', 'updated_at']
 
 class InventoryItemSerializer(serializers.ModelSerializer):

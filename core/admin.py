@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import InventoryItem, Office, ItemRegistry
+from .models import InventoryItem, Office, ItemRegister
 
 # Register your models here.
 
@@ -12,14 +12,14 @@ admin.site.register(Office, OfficeAdmin)
 
 
 # Optional: Customize how the model appears in the admin
-class ItemRegistryAdmin(admin.ModelAdmin):
-    list_display = ('stock_id', 'name', 'description', 'created_at')  # Display these fields in the list view
-    search_fields = ('stock_id', 'name')  # Allow searching by stock_id and name
+class ItemRegisterAdmin(admin.ModelAdmin):
+    list_display = ('item_id', 'name', 'description', 'created_at')  # Display these fields in the list view
+    search_fields = ('item_id', 'name')  # Allow searching by item_id and name
     list_filter = ('created_at',)  # Filter by created_at in the admin interface
     ordering = ('created_at',)  # Order by created_at by default
 
 # Register the model with the custom admin class
-admin.site.register(ItemRegistry, ItemRegistryAdmin)
+admin.site.register(ItemRegister, ItemRegisterAdmin)
 
 
 class InventoryItemAdmin(admin.ModelAdmin):

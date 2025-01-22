@@ -348,44 +348,28 @@ class AssignOfficesView(APIView):
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class RemoveOfficesView(APIView):
-    """
-    Allows admins or superadmins to remove offices from a staff user's assignments.
-    """
     permission_classes = [IsAuthenticated, IsAdminOrSuperAdmin]
 
-    def delete(self, request, user_id):
-        """
-        Remove one or more assigned offices from a staff user.
-        """
+    def post(self, request):
+        office_id = request.data.get("office_id")
+        user_id = request.data.get("user_id")
+
         try:
             user = CustomUser.objects.get(id=user_id)
+            office = Office.objects.get(id=office_id)
 
-            # Ensure the user is a staff member
-            if user.role != "staff":
-                return Response({"error": "Only staff users can have offices removed."}, status=400)
-
-            # Retrieve offices to be removed
-            offices_to_remove = set(request.data.get("assigned_offices", []))
-            current_offices = set(user.assigned_offices.values_list("id", flat=True))
-
-            # Ensure that the offices being removed actually exist
-            invalid_offices = offices_to_remove - current_offices
-            if invalid_offices:
-                return Response({"error": "Some offices were not assigned to this user."}, status=400)
-
-            # Calculate remaining offices
-            remaining_offices = current_offices - offices_to_remove
-            user.assigned_offices.set(remaining_offices)
+            # Remove the office from the user's assignments
+            user.assigned_offices.remove(office)
             user.save()
 
             return Response(
-                {
-                    "message": f"Offices removed successfully for {user.username}.",
-                    "remaining_offices": list(remaining_offices),
-                },
+                {"message": "Office assignment removed successfully."},
                 status=status.HTTP_200_OK,
             )
+
         except CustomUser.DoesNotExist:
-            return Response({"error": "Staff user not found."}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"error": "User not found."}, status=status.HTTP_404_NOT_FOUND)
+        except Office.DoesNotExist:
+            return Response({"error": "Office not found."}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
