@@ -283,7 +283,7 @@ class RegisterDownloadView(APIView):
 class InventoryViewSet(ModelViewSet):
     queryset = InventoryItem.objects.all()
     serializer_class = InventoryItemSerializer
-    permission_classes = [IsAuthenticated, IsAdminOrStaffOrReadOnly]
+    permission_classes = [IsAuthenticated, IsAdminOrSuperAdmin, IsAdminOrStaffOrReadOnly]
 
     def get_queryset(self):
         """
@@ -312,40 +312,34 @@ class InventoryViewSet(ModelViewSet):
         if self.action in ['retrieve', 'update', 'destroy']:
             self.permission_classes = [IsOwnerOrAdminOrStaff, IsAssignedStaff]
         elif self.action == 'create':
-            self.permission_classes = [IsAuthenticated, IsAssignedStaff]
+            # Add IsAdminOrSuperAdmin to allow superadmins to create
+            self.permission_classes = [IsAuthenticated, IsAdminOrSuperAdmin]
         else:
             self.permission_classes = [IsAdminOrStaffOrReadOnly]
         return super().get_permissions()
 
     def perform_create(self, serializer):
-        """
-        Automatically set the 'user', 'office', and 'item' fields when creating an inventory item.
-        """
-        # Get office from the authenticated user's assigned offices
         user = self.request.user
-        office = user.assigned_offices.first()  # Assuming each user has one office assigned
+
+        # Handle office assignment
+        if user.role == 'super_admin' or user.is_superuser:
+            office_id = self.request.data.get('office_id')
+            if not office_id:
+                raise ValidationError("Office ID is required for superadmin actions.")
+            office = get_object_or_404(Office, id=office_id)
+        else:
+            office = user.assigned_offices.first()
+            if not office:
+                raise ValidationError("User is not assigned to any office.")
         
-        # Ensure the user is assigned to an office
-        if not office:
-            raise ValidationError("User is not assigned to any office.")
-        
-        # Get item_id (primary key of the ItemRegister)
-        item_id = self.request.data.get('item_id')  # Ensure item_id is passed as the PK (not item_id)
-        
-        # Validate that item_id is a valid primary key
+        # Handle item assignment
+        item_id = self.request.data.get('item_id')
         if not item_id:
             raise ValidationError("Item ID is required.")
-        
-        # Fetch the ItemRegister instance by its primary key (item_id)
         item = get_object_or_404(ItemRegister, id=item_id)
 
-        # Check if the office is valid for the user
-        if office not in user.assigned_offices.all():
-            raise PermissionDenied("You do not have permission to manage inventory for this office.")
-        
-        # Save the inventory item with user, office, and item automatically set
-        serializer.save(user=user, office=office, item_id=item)
-
+        # Save the instance with user, office, and item set
+        serializer.save(user=user, office=office, item_id=item)  # Pass the instance, not the ID
 
     def destroy(self, request, *args, **kwargs):
         """
@@ -353,16 +347,12 @@ class InventoryViewSet(ModelViewSet):
         """
         instance = self.get_object()
 
-        # Example: Prevent deletion if the item's quantity is non-zero (optional business rule)
-        if instance.quantity > 0:
-            return Response(
-                {"error": "Cannot delete an inventory item with non-zero quantity."},
-                status=400
-            )
-
         # Perform deletion
         self.perform_destroy(instance)
-        return Response({"message": f"Item '{instance.item.name}' successfully deleted."}, status=200)
+
+        # Accessing the related item through 'item_id'
+        return Response({"message": f"Item '{instance.item_id.name}' successfully deleted."}, status=200)
+
 
 # --- Template View ---
 class TemplateView(APIView):
