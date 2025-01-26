@@ -16,6 +16,7 @@ from accounts.permissions import IsAdminOrSuperAdmin
 from accounts.models import CustomUser, Profile, Organization
 from core.models import Office
 from rest_framework_simplejwt.views import TokenObtainPairView
+from rest_framework.parsers import MultiPartParser, FormParser
 
 
 class CustomTokenObtainPairView(TokenObtainPairView):
@@ -53,23 +54,20 @@ class RegisterUserView(APIView):
         return Response(serializer.errors, status=400)
 
 class UserProfileView(APIView):
-    """
-    Get or update the current user's profile.
-    """
-
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
         user = request.user
         try:
-            profile = user.profile  # Since we have a one-to-one relationship
+            profile = user.profile
         except Profile.DoesNotExist:
             return Response(
-                {"error": "Profile not found."}, status=status.HTTP_404_NOT_FOUND
+                {"message": "Profile not found."},
+                status=status.HTTP_404_NOT_FOUND,
             )
 
-        # Serialize the profile data
-        serializer = ProfileSerializer(profile)
+        # Serialize the profile data using the updated ProfileSerializer
+        serializer = ProfileSerializer(profile, context={'request': request})
         return Response(
             {"message": "User profile fetched successfully.", "data": serializer.data},
             status=status.HTTP_200_OK,
@@ -78,23 +76,51 @@ class UserProfileView(APIView):
     def put(self, request):
         user = request.user
         try:
-            profile = user.profile  # Fetch user's profile
+            profile = user.profile
         except Profile.DoesNotExist:
             return Response(
-                {"error": "Profile not found."}, status=status.HTTP_404_NOT_FOUND
+                {"message": "Profile not found."},
+                status=status.HTTP_404_NOT_FOUND,
             )
 
-        # Deserialize the profile data to update
+        # Deserialize the profile data to update using the updated ProfileSerializer
         serializer = ProfileSerializer(profile, data=request.data, partial=True)
         if serializer.is_valid():
             serializer.save()
+
+            user_data = request.data.get('user', {})
+            if 'first_name' in user_data:
+                user.first_name = user_data['first_name']
+            if 'last_name' in user_data:
+                user.last_name = user_data['last_name']
+            if 'organization' in user_data:
+                user.organization = user_data['organization']
+            user.save()
+
             return Response(
                 {"message": "Profile updated successfully.", "data": serializer.data},
                 status=status.HTTP_200_OK,
             )
         return Response(
-            {"error": serializer.errors}, status=status.HTTP_400_BAD_REQUEST
+            {"message": "Invalid data.", "error": serializer.errors},
+            status=status.HTTP_400_BAD_REQUEST,
         )
+
+class ProfilePictureUploadView(APIView):
+    parser_classes = [MultiPartParser, FormParser]
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, *args, **kwargs):
+        user = request.user
+        profile = user.profile
+
+        if 'profile_picture' not in request.data:
+            return Response({"error": "No file provided"}, status=status.HTTP_400_BAD_REQUEST)
+
+        profile.profile_picture = request.data['profile_picture']
+        profile.save()
+
+        return Response({"message": "Profile picture updated successfully", "profile_picture": profile.profile_picture.url}, status=status.HTTP_200_OK)
 
 class LogoutView(APIView):
     permission_classes = [IsAuthenticated]

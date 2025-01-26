@@ -15,35 +15,33 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     @classmethod
     def get_token(cls, user):
         token = super().get_token(user)
-
-        # Add custom claims
-        token['role'] = user.role  # Assuming the User model has a `role` field
+        token["role"] = user.role  # Add custom claims
         return token
 
     def validate(self, attrs):
-        username_or_email = attrs.get("username")
+        username_or_email = attrs.get("username")  # Expect frontend to send this as "username"
         password = attrs.get("password")
 
+        if not username_or_email or not password:
+            raise AuthenticationFailed("Username/email and password are required")
+
         try:
-            # Attempt to find user by email
-            user = User.objects.get(email=username_or_email)
+            # Find user by email or username (case-insensitive)
+            user = User.objects.get(email__iexact=username_or_email)
         except User.DoesNotExist:
             try:
-                # Fallback to username
-                user = User.objects.get(username=username_or_email)
+                user = User.objects.get(username__iexact=username_or_email)
             except User.DoesNotExist:
-                raise AuthenticationFailed("Invalid credentials")
+                raise AuthenticationFailed("Invalid username/email")
 
-        # Set the username for further validation
-        attrs["username"] = user.username
+        if not user.check_password(password):
+            raise AuthenticationFailed("Incorrect password")
 
-        # Call the base validate method
-        validated_data = super().validate(attrs)
-
-        # Add the role to the validated data (this will be included in the JWT response)
-        validated_data['role'] = user.role
-
-        return validated_data
+        # Validate and return token
+        attrs["username"] = user.username  # Required for parent class validation
+        data = super().validate(attrs)
+        data["role"] = user.role
+        return data
 
 class CustomTokenObtainPairView(TokenObtainPairView):
     serializer_class = CustomTokenObtainPairSerializer
@@ -74,17 +72,55 @@ class RegisterUserSerializer(serializers.ModelSerializer):
         )
         return user
 
+class OrganizationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Organization
+        fields = ['name', 'description']
+
 class ProfileSerializer(serializers.ModelSerializer):
+    name = serializers.SerializerMethodField()  # Combine first_name and last_name
+    username = serializers.CharField(source='user.username')  # Include username explicitly
+    role = serializers.CharField(source='user.role')  # User role
+    organization = serializers.CharField(source='user.organization.name', default="No organization")
+    assigned_offices = serializers.SerializerMethodField()  # Assigned offices
+    profile_picture = serializers.ImageField()  # Use ImageField for full URL
+
     class Meta:
         model = Profile
-        fields = ['organization', 'profile_picture', 'bio']
+        fields = ['username', 'name', 'role', 'organization', 'assigned_offices', 'profile_picture', 'bio']
+
+    def get_name(self, obj):
+        """
+        Combine the first_name and last_name fields of the related user.
+        If both are empty, default to the username.
+        """
+        first_name = obj.user.first_name or ""
+        last_name = obj.user.last_name or ""
+        full_name = f"{first_name} {last_name}".strip()  # Remove extra spaces
+        return full_name if full_name else obj.user.username
+    
+    def get_profile_picture(self, obj):
+        request = self.context.get('request')  # Get the request from serializer context
+        if obj.profile_picture:
+            return request.build_absolute_uri(obj.profile_picture.url)
+        return None
+
+    def get_assigned_offices(self, obj):
+        # Return the office names the user is assigned to
+        return [office.name for office in obj.user.assigned_offices.all()]
 
     def update(self, instance, validated_data):
-        # Update profile fields
-        instance.organization = validated_data.get('organization', instance.organization)
+        # Update profile fields and linked user fields
         instance.profile_picture = validated_data.get('profile_picture', instance.profile_picture)
         instance.bio = validated_data.get('bio', instance.bio)
-        instance.save()
+
+        # Update related user data
+        user_data = validated_data.get('user', {})
+        if 'organization' in user_data:
+            instance.user.organization = user_data['organization']
+            instance.user.save()
+
+        instance.save()  # Save the profile instance
         return instance
 
 class UserListSerializer(serializers.ModelSerializer):
