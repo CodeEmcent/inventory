@@ -2,6 +2,7 @@ from django.urls import path
 from .views import (
     RegisterUserView,
     UserProfileView,
+    ProfilePictureUploadView,
     AllUsersView,
     UserDetailView,
     AssignOfficesView,
@@ -16,6 +17,7 @@ from .views import (
 urlpatterns = [
     path('register/', RegisterUserView.as_view(), name='register'),
     path('profile/', UserProfileView.as_view(), name='user-profile'),
+    path('profile-picture/', ProfilePictureUploadView.as_view(), name='profile-picture-upload'),
     path('all-staff/', AllUsersView.as_view(), name='all-staff'),
     path('users/<int:user_id>/', UserDetailView.as_view(), name='user_detail'),
     path('update/<int:user_id>/', UpdateUserView.as_view(), name='update_user'),

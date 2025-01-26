@@ -15,30 +15,13 @@ class Organization(models.Model):
         return self.name
 
 class CustomUserManager(BaseUserManager):
+    VALID_ROLES = ['staff', 'admin', 'super_admin']
+
     def create_user(self, username: str, email: str = None, password: str = None, role: str = 'staff', **extra_fields):
         if not username:
             raise ValueError("The Username field must be set")
-        email = self.normalize_email(email)
-        user = self.model(username=username, email=email, role=role, **extra_fields)
-        user.set_password(password)
-        user.save(using=self._db)
-        return user
-
-    def create_superuser(self, username: str, email: str = None, password: str = None, **extra_fields):
-        extra_fields.setdefault('is_staff', True)
-        extra_fields.setdefault('is_superuser', True)
-
-        if not extra_fields.get('is_staff'):
-            raise ValueError("Superuser must have is_staff=True.")
-        if not extra_fields.get('is_superuser'):
-            raise ValueError("Superuser must have is_superuser=True.")
-
-        return self.create_user(username, email, password, role='super_admin', **extra_fields)
-
-class CustomUserManager(BaseUserManager):
-    def create_user(self, username: str, email: str = None, password: str = None, role: str = 'staff', **extra_fields):
-        if not username:
-            raise ValueError("The Username field must be set")
+        if role not in self.VALID_ROLES:
+            raise ValueError(f"Invalid role: {role}")
         email = self.normalize_email(email)
         user = self.model(username=username, email=email, role=role, **extra_fields)
         user.set_password(password)
@@ -77,31 +60,30 @@ class CustomUser(AbstractUser):
         help_text="The organization this user belongs to."
     )
     assigned_offices = models.ManyToManyField(
-        'core.Office',  # Dynamically referenced
+        'core.Office',
         related_name="assigned_users",
         blank=True,
         help_text="The offices assigned to the user."
     )
 
-    objects = CustomUserManager()  # Assign the custom user manager
+    objects = CustomUserManager()
+
+    def save(self, *args, **kwargs):
+        if not self.is_superuser:  # Skip validation for superusers
+            if self.pk and self.role != 'staff' and self.assigned_offices.exists():
+                # Clear assigned offices if role is not 'staff'
+                self.assigned_offices.clear()
+                # raise ValueError("Only staff users can be assigned offices.")
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.username} ({self.role})"
-
-    def save(self, *args, **kwargs):
-        """
-        Custom save method to validate role assignments.
-        """
-        if self.pk and self.role != 'staff' and self.assigned_offices.exists():
-            raise ValueError("Only staff users can be assigned offices.")
-        super().save(*args, **kwargs)
 
 class Profile(models.Model):
     """
     Represents a user's profile, including additional information such as bio and profile picture.
     """
     user = models.OneToOneField(CustomUser, on_delete=models.CASCADE, related_name="profile")
-    organization = models.CharField(max_length=255, null=True, blank=True)
     profile_picture = models.ImageField(upload_to='profiles/', null=True, blank=True)
     bio = models.TextField(null=True, blank=True)
     
