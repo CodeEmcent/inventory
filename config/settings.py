@@ -22,7 +22,7 @@ SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY")
 DEBUG = os.environ.get("DEBUG", True) == "True"
 # DEBUG = True
 
-ALLOWED_HOSTS = ["127.0.0.1", "localhost", "https://inventory-aar6.onrender.com"]
+ALLOWED_HOSTS = ["*"]
 
 # settings.py
 APPEND_SLASH = True  # Ensures Django redirects URLs without trailing slashes.
