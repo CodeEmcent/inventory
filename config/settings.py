@@ -16,12 +16,13 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY')
+SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.environ.get("DEBUG", True) == "True"
+# DEBUG = True
 
-ALLOWED_HOSTS = ['127.0.0.1', 'localhost', 'https://inventory-aar6.onrender.com']
+ALLOWED_HOSTS = ["127.0.0.1", "localhost", "https://inventory-aar6.onrender.com"]
 
 # settings.py
 APPEND_SLASH = True  # Ensures Django redirects URLs without trailing slashes.
@@ -67,7 +68,7 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "debug_toolbar.middleware.DebugToolbarMiddleware",
-    'whitenoise.middleware.WhiteNoiseMiddleware',
+    "whitenoise.middleware.WhiteNoiseMiddleware",
 ]
 
 ROOT_URLCONF = "config.urls"
@@ -117,32 +118,30 @@ CORS_ALLOW_HEADERS = (
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 
+if DEBUG:
+    DATABASES = {"default": dj_database_url.parse(os.environ.get("DATABASE_URL"))}
+else:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": "inventory_db",
+            "USER": "postgres",
+            "PASSWORD": "@Emcent001",
+            "HOST": "localhost",
+            "PORT": "5432",
+        }
+    }
+
 # DATABASES = {
 #     "default": {
 #         "ENGINE": "django.db.backends.postgresql",
-#         "NAME": "inventory_db",
-#         "USER": "postgres",
-#         "PASSWORD": "@Emcent001",
-#         "HOST": "localhost",
-#         "PORT": "5432",
+#         "NAME": os.environ.get('DATABASE_NAME'),
+#         "USER": os.environ.get('DATABASE_USER'),
+#         "PASSWORD": os.environ.get('DATABASE_PASSWORD'),
+#         "HOST": os.environ.get('DATABASE_HOST'),
+#         "PORT": os.environ.get('DATABASE_PORT'),
 #     }
 # }
-
-# DATABASE_URL = os.getenv('DATABASE_URL')
-# DATABASES = {
-#     'default': dj_database_url.config(default=DATABASE_URL)
-# }
-
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": os.environ.get('DATABASE_NAME'),
-        "USER": os.environ.get('DATABASE_USER'),
-        "PASSWORD": os.environ.get('DATABASE_PASSWORD'),
-        "HOST": os.environ.get('DATABASE_HOST'),
-        "PORT": os.environ.get('DATABASE_PORT'),
-    }
-}
 
 AUTH_USER_MODEL = "accounts.CustomUser"
 
@@ -176,10 +175,14 @@ REST_FRAMEWORK = {
 
 # Simple JWT settings
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=30),  # Set the expiration time of the access token
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),  # Set the expiration time of the refresh token
-    'ROTATE_REFRESH_TOKENS': True,
-    'BLACKLIST_AFTER_ROTATION': True,
+    "ACCESS_TOKEN_LIFETIME": timedelta(
+        minutes=30
+    ),  # Set the expiration time of the access token
+    "REFRESH_TOKEN_LIFETIME": timedelta(
+        days=1
+    ),  # Set the expiration time of the refresh token
+    "ROTATE_REFRESH_TOKENS": True,
+    "BLACKLIST_AFTER_ROTATION": True,
     "AUTH_HEADER_TYPES": ("Bearer",),
 }
 
@@ -199,11 +202,11 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.1/howto/static-files/
 
 STATIC_URL = "static/"
-STATIC_ROOT = BASE_DIR / 'staticfiles'
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+STATIC_ROOT = BASE_DIR / "staticfiles"
+STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
-MEDIA_URL = '/media/'
-MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+MEDIA_URL = "/media/"
+MEDIA_ROOT = os.path.join(BASE_DIR, "media")
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
