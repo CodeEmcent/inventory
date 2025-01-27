@@ -20,7 +20,7 @@ def welcome(request):
         {
             "name": "EmcentVault API Documentation",
             "message": "Welcome. To View EmcentVault API Documentation, Click the Link Below.",
-            # "url": "",
+            "url": "https://inventory-aar6.onrender.com/swagger",
             "status": 200,
         }
     )
