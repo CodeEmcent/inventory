@@ -19,7 +19,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.environ.get("DEBUG", True) == "True"
+DEBUG = os.getenv("DEBUG", "True") == "True"
 # DEBUG = True
 
 ALLOWED_HOSTS = ["*"]
@@ -119,8 +119,7 @@ CORS_ALLOW_HEADERS = (
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 
 if DEBUG:
-    DATABASES = {"default": dj_database_url.parse(os.environ.get("DATABASE_URL"))}
-else:
+    # Local Database (Development)
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.postgresql",
@@ -131,6 +130,16 @@ else:
             "PORT": "5432",
         }
     }
+else:
+    # Remote Database (Production)
+    DATABASES = {
+        "default": dj_database_url.parse(
+            os.environ.get("DATABASE_URL"),
+            conn_max_age=600,
+            ssl_require=True  # Enforce SSL for secure connection
+        )
+    }
+
 
 # DATABASES = {
 #     "default": {
