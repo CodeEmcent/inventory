@@ -15,15 +15,15 @@ from rest_framework_simplejwt.views import TokenRefreshView
 from django.conf.urls.static import static
 from django.conf import settings
 
-def welcome(request):
-    return JsonResponse(
-        {
-            "name": "EmcentVault API Documentation",
-            "message": "Welcome. To View EmcentVault API Documentation, Click the Link Below.",
-            "url": "https://inventory-aar6.onrender.com/swagger?",
-            "status": 200,
-        }
-    )
+# def welcome(request):
+#     return JsonResponse(
+#         {
+#             "name": "EmcentVault API Documentation",
+#             "message": "Welcome. To View EmcentVault API Documentation, Click the Link Below.",
+#             "url": "https://inventory-aar6.onrender.com/swagger?",
+#             "status": 200,
+#         }
+#     )
 
 schema_view = get_schema_view(
     openapi.Info(
@@ -43,7 +43,7 @@ urlpatterns = [
     path('swagger/', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
     path('redoc/', schema_view.with_ui('redoc', cache_timeout=0), name='schema-redoc'),
     
-    path('', welcome),
+    # path('', welcome),
     path("api/token/", CustomTokenObtainPairView.as_view(), name="token_obtain_pair"),
     path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     
